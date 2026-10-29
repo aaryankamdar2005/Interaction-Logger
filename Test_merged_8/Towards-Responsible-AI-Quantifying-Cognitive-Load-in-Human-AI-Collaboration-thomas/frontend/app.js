@@ -1,4 +1,5 @@
 import { renderResearchMetricsPage } from './research_metrics_viewer.js';
+import { selectSessionTasks, PREDEFINED_TASKS } from './tasks.js';
 let BACKEND_URL_FROM_ENV = '';
 try {
   BACKEND_URL_FROM_ENV = import.meta.env.BACKEND_URL;
@@ -6,38 +7,7 @@ try {
   // Ignore
 }
 const API_BASE_URL = BACKEND_URL_FROM_ENV ? `${BACKEND_URL_FROM_ENV}/api` : '/api';
-const questions = [
-  {
-    id: 'TASK-1-PROGRAMMING',
-    topic: 'TASK 1 - PROGRAMMING',
-    category: 'Coding & Programming',
-    subquestions: [
-      { id: 'TASK-1-A', difficulty: 'Easy', expectedTime: '3-5 minutes', title: 'Palindrome checker', text: 'Write a Python program to check whether a string is a palindrome.' },
-      { id: 'TASK-1-B', difficulty: 'Easy', expectedTime: '3-5 minutes', title: 'Anagram checker', text: 'Determine whether two strings are anagrams.' },
-      { id: 'TASK-1-C', difficulty: 'Easy', expectedTime: '3-5 minutes', title: 'Prime number program', text: 'Write the Program to print Prime Number.' }
-    ]
-  },
-  {
-    id: 'TASK-2-APTITUDE',
-    topic: 'TASK 2 - APTITUDE',
-    category: 'Aptitude',
-    subquestions: [
-      { id: 'TASK-2-A', difficulty: 'Easy', expectedTime: '3-5 minutes', title: 'Percentage calculation', text: 'A student scores 360 out of 500. Find the percentage.' },
-      { id: 'TASK-2-B', difficulty: 'Easy', expectedTime: '3-5 minutes', title: 'Find the fifth number', text: 'The average of five numbers is 24. Four of the numbers are 20, 22, 25, and 23. Find the fifth number.' },
-      { id: 'TASK-2-C', difficulty: 'Medium', expectedTime: '5-7 minutes', title: 'Age-ratio problem', text: 'Eight years ago, the ages of A and B were in the ratio 3 : 5. Twelve years from now, their ages will be in the ratio 5 : 7. Find their present ages.' }
-    ]
-  },
-  {
-    id: 'TASK-3-EMAIL-WRITING',
-    topic: 'TASK 3 - EMAIL WRITING',
-    category: 'Email Writing',
-    subquestions: [
-      { id: 'TASK-3-A', difficulty: 'Easy', expectedTime: '3-5 minutes', title: 'Email about teamwork', text: 'Write an email to your manager about teamwork. Explain how your team is working together and mention one positive contribution or improvement.' },
-      { id: 'TASK-3-B', difficulty: 'Easy', expectedTime: '3-5 minutes', title: 'Leave request email', text: 'Write a professional email to your manager requesting leave. Include the reason, dates, and a brief plan for your work during the absence.' },
-      { id: 'TASK-3-C', difficulty: 'Easy', expectedTime: '3-5 minutes', title: 'Technical problem email', text: 'Write an email to your manager reporting a technical problem. Clearly describe the problem, its impact, and the support or action you need.' }
-    ]
-  }
-];
+const DEFAULT_TASKS = PREDEFINED_TASKS;
 
 /* Archived question definitions retained only for traceability; the active assessment uses the PDF tasks above.
 const archivedQuestions = [
@@ -84,6 +54,7 @@ const state = {
   participant: null,
   participantSessionToken: '',
   sessionId: '',
+  questions: [],
   current: 0,
   subquestion: 0,
   questionTransition: '',
@@ -96,6 +67,7 @@ const state = {
   paas: null,
   baselineNasaTlx: {},
   nasaTlx: {},
+  endedEarly: false,
   questionRatings: [],
   skippedQuestionIds: [],
   testMode: false,
@@ -256,6 +228,7 @@ function saveParticipantState() {
     participant: state.participant,
     participantSessionToken: state.participantSessionToken,
     sessionId: state.sessionId,
+    questions: state.questions,
     current: state.current,
     subquestion: state.subquestion,
     selectedLLM: state.selectedLLM,
@@ -264,6 +237,7 @@ function saveParticipantState() {
     paas: state.paas,
     nasaTlx: state.nasaTlx,
     baselineNasaTlx: state.baselineNasaTlx,
+    endedEarly: state.endedEarly,
     questionRatings: state.questionRatings,
     skippedQuestionIds: state.skippedQuestionIds,
     testMode: state.testMode,
@@ -304,6 +278,7 @@ function resetParticipantSession() {
   state.participant = null;
   state.participantSessionToken = '';
   state.sessionId = '';
+  state.questions = [];
   state.current = 0;
   state.subquestion = 0;
   state.selectedLLM = '';
@@ -312,6 +287,7 @@ function resetParticipantSession() {
   state.paas = null;
   state.baselineNasaTlx = {};
   state.nasaTlx = {};
+  state.endedEarly = false;
   state.questionRatings = [];
   state.skippedQuestionIds = [];
   state.testMode = false;
@@ -351,7 +327,15 @@ function restoreParticipantState() {
     const saved = JSON.parse(sessionStorage.getItem(PARTICIPANT_STATE_KEY) || 'null');
     if (!saved?.participant || !saved.participantSessionToken) return false;
     Object.assign(state, saved);
+    if (Array.isArray(saved.questions) && saved.questions.length > 0) {
+      state.questions = saved.questions;
+    } else if (saved.participant) {
+      state.questions = selectSessionTasks(saved.participant);
+    } else {
+      state.questions = [];
+    }
     state.skippedQuestionIds = Array.isArray(saved.skippedQuestionIds) ? saved.skippedQuestionIds : [];
+    state.endedEarly = Boolean(saved.endedEarly);
     state.assessmentStage = saved.assessmentStage === 'question-ratings' ? 'nasa' : saved.assessmentStage || (saved.questionRatings?.length ? 'nasa' : saved.started ? 'exam' : 'instructions');
     state.finishing = false;
     state.chatStreaming = false;
@@ -381,7 +365,7 @@ async function resumeParticipantState() {
     return;
   }
   if (state.assessmentStage === 'nasa') {
-    renderNasaTlxAssessment();
+    renderNasaTlxAssessment(state.endedEarly);
     return;
   }
   const questionWasStarted = state.started;
@@ -675,6 +659,9 @@ function renderLogin() {
 
 async function startParticipantSession(participant) {
   state.participant = participant;
+  state.questions = selectSessionTasks(participant);
+  state.current = 0;
+  state.subquestion = 0;
   state.testMode = Boolean(participant.test_mode);
   const loginTime = Date.now();
   state.sessionStart = new Date(loginTime).toISOString();
@@ -731,7 +718,9 @@ function renderBaselineNasaTlx() {
 
 async function renderInstructions() {
   state.assessmentStage = 'instructions';
-  app.innerHTML = `<div class="instructions-overlay"><div class="card instructions-card"><div class="instruction-heading"><h2>Assessment Instructions</h2></div><ol><li>You have one hour after clicking <strong>Start Assessment</strong> to complete the entire assessment.</li><li>The assessment contains three tasks.</li><li>Each task has one main question followed by one related sub-question.</li><li>Complete both questions before the assessment advances to the next task.</li><li>Keep your face visible and remain in a well-lit area while camera tracking runs in the background.</li><li>Groq is selected automatically for every question.</li><li>Submit your final answer for all six questions.</li></ol><div id="ragReadiness" class="muted-text">Checking assessment resources...</div><button class="primary" id="startAssessment" type="button" disabled>Start Assessment</button></div></div>`;
+  const domainText = escapeHtml(state.participant?.domain || 'General');
+  const levelText = escapeHtml(state.participant?.ai_familiarity || 'Intermediate');
+  app.innerHTML = `<div class="instructions-overlay"><div class="card instructions-card"><div class="instruction-heading"><h2>Assessment Instructions</h2></div><ol><li>You have one hour after clicking <strong>Start Assessment</strong> to complete the session.</li><li>The session contains <strong>6 dynamic tasks</strong> tailored to your domain (<strong>${domainText}</strong>) and experience level (<strong>${levelText}</strong>).</li><li>For each task, read the problem scenario and collaboration objectives in the main panel.</li><li>Select an AI partner (ChatGPT or Groq) in the right panel and collaborate: ask questions, explore trade-offs, and analyze responses.</li><li>Once you have reviewed the AI's response, click <strong>I have reviewed the AI response · Proceed to Next Task</strong> to move forward.</li><li>Keep your face visible and remain in a well-lit area while webcam tracking measures cognitive load indicators in the background.</li></ol><div id="ragReadiness" class="muted-text">Checking assessment resources...</div><button class="primary" id="startAssessment" type="button" disabled>Start Assessment</button></div></div>`;
   saveParticipantState();
   const startButton = document.getElementById('startAssessment');
   const ragReadiness = document.getElementById('ragReadiness');
@@ -777,19 +766,34 @@ async function renderInstructions() {
   });
 }
 
+function getSessionTaskList() {
+  if (Array.isArray(state.questions) && state.questions.length > 0) return state.questions;
+  if (state.participant) {
+    state.questions = selectSessionTasks(state.participant);
+    return state.questions;
+  }
+  return PREDEFINED_TASKS.slice(0, 6);
+}
+
 function currentQuestion() {
-  const group = questions[state.current];
-  const questionPart = `${group.topic} - Question ${state.subquestion + 1} of ${group.subquestions.length}`;
-  return { ...group, ...group.subquestions[state.subquestion], topicId: group.id, questionPart };
+  const list = getSessionTaskList();
+  const task = list[state.current] || list[0] || PREDEFINED_TASKS[0];
+  const totalTasks = list.length || 6;
+  const questionPart = `Task ${state.current + 1} of ${totalTasks}`;
+  return {
+    ...task,
+    topicId: task.topicId || `TASK-${state.current + 1}`,
+    questionPart: task.questionPart || questionPart
+  };
 }
 
 function allQuestionLocations() {
-  return questions.flatMap((task, taskIndex) => task.subquestions.map((_, subquestionIndex) => ({ taskIndex, subquestionIndex })));
+  const list = getSessionTaskList();
+  return list.map((_, taskIndex) => ({ taskIndex, subquestionIndex: 0 }));
 }
 
 function currentQuestionIndex() {
-  const locations = allQuestionLocations();
-  return locations.findIndex(location => location.taskIndex === state.current && location.subquestionIndex === state.subquestion);
+  return state.current;
 }
 
 function saveCurrentQuestionDraft() {
@@ -824,46 +828,97 @@ function renderLlmOption(name, configuredKey) {
 function renderExam() {
   state.assessmentStage = 'exam';
   const q = currentQuestion();
-  const codingQuestion = q.category === 'Coding & Programming';
   const progress = assessmentProgressSnapshot();
+  const totalTasks = (state.questions && state.questions.length) || 6;
+  const userPrompts = state.messages.filter(m => m.role === 'user');
+  const hasCollaborated = userPrompts.length > 0;
+  const diffBadgeClass = (q.difficulty || 'Easy').toLowerCase();
+
   app.innerHTML = `
     <div class="exam-shell">
       <header class="exam-top">
-        <div class="brand"><div class="logo">C</div><div><h1>CogniTrack <span style="color:#38dd9a">AI</span></h1><small>${state.participant.participant_id}</small></div></div>
-        <div class="center">Task ${state.current + 1} of ${questions.length} · ${q.questionPart}</div>
+        <div class="brand"><div class="logo">C</div><div><h1>CogniTrack <span style="color:#38dd9a">AI</span></h1><small>${escapeHtml(state.participant?.participant_id || '')}</small></div></div>
+        <div class="center">Task ${state.current + 1} of ${totalTasks} · <span class="task-domain-pill">${escapeHtml(q.domain || 'General')}</span></div>
         <div class="exam-actions"><div class="timer" id="timer">--:--</div><button class="danger-btn" id="endSession" ${state.finishing ? 'disabled' : ''}>${state.finishing ? 'Ending Session…' : 'End Session'}</button></div>
       </header>
       <main class="exam-grid">
         <div class="assessment-progress card panel" aria-label="Assessment progress"><div class="assessment-progress-heading"><strong>Assessment progress</strong><span>${progress.percent}% complete</span></div><div class="assessment-progress-track"><i style="width:${progress.percent}%"></i></div><small>${progress.answered} answered · ${progress.skipped} skipped · ${progress.total - progress.completed} remaining</small></div>
         <section class="stack">
           ${state.questionTransition ? `<div class="question-transition" role="status">${escapeHtml(state.questionTransition)}</div>` : ''}
-          <article class="card panel" id="currentQuestionCard" tabindex="-1">
-            <div class="section-label">${q.questionPart} · ${q.category} · ${q.difficulty}</div>
-            <h2 class="question-title">${q.title}</h2>
-            <p class="question-text">${q.text}</p>
+          <article class="card panel task-detail-card" id="currentQuestionCard" tabindex="-1">
+            <div class="task-meta-bar">
+              <span class="badge diff-badge ${diffBadgeClass}">${escapeHtml(q.difficulty || 'Easy')}</span>
+              <span class="badge category-badge">${escapeHtml(q.category || 'Human-AI Collaboration')}</span>
+              <span class="badge domain-badge">${escapeHtml(q.domain || 'Domain')}</span>
+              <span class="expected-time-tag">⏱ ${escapeHtml(q.expectedTime || '3–5 minutes')}</span>
+            </div>
+            <h2 class="question-title">${escapeHtml(q.title || 'Dynamic Task')}</h2>
+            
+            <div class="scenario-box">
+              <div class="box-header">
+                <span class="box-icon">📋</span>
+                <strong>Scenario & Problem Context</strong>
+              </div>
+              <p class="scenario-text">${escapeHtml(q.scenario || q.text)}</p>
+            </div>
+
+            ${Array.isArray(q.instructions) && q.instructions.length > 0 ? `
+            <div class="focus-box">
+              <div class="box-header">
+                <span class="box-icon">🎯</span>
+                <strong>Collaboration Focus & Objectives</strong>
+              </div>
+              <ol class="task-instructions-list">
+                ${q.instructions.map(ins => `<li>${escapeHtml(ins)}</li>`).join('')}
+              </ol>
+            </div>` : ''}
           </article>
-          ${codingQuestion ? `<article class="card panel">
-            <div class="section-label">Online Code Compiler</div>
-             <p class="compiler-note">Choose Java or Python, then run your code in an external sandbox before submitting. Java programs must use <code>public class Main</code>.</p>
-            <label class="compiler-input-label" for="compilerLanguage">Programming language</label>
-            <select id="compilerLanguage" class="compiler-language" ${state.started ? '' : 'disabled'}><option value="java" ${state.compilerLanguage === 'java' ? 'selected' : ''}>Java</option><option value="python" ${state.compilerLanguage === 'python' ? 'selected' : ''}>Python</option></select>
-             <textarea id="codeEditor" class="code-editor" spellcheck="false" placeholder="${state.compilerLanguage === 'java' ? 'public class Main {\n  public static void main(String[] args) {\n    // write your code here\n  }\n}' : 'print(\"Hello, world!\")'}" ${state.started ? '' : 'disabled'}>${escapeHtml(state.codeDraft)}</textarea>
-             <label class="compiler-input-label" for="compilerInput">Standard input (optional)</label>
-             <textarea id="compilerInput" class="compiler-input" spellcheck="false" placeholder="Input passed to your program" ${state.started ? '' : 'disabled'}>${escapeHtml(state.compilerInput)}</textarea>
-             <div class="actions"><button class="secondary" id="runCode" type="button" ${state.started && !state.codeRunning ? '' : 'disabled'}>${state.codeRunning ? 'Running…' : 'Run Code'}</button></div>
-             ${renderCompilerResult()}
-            </article>` : ''}
-          <article class="card panel">
-            <div class="section-label">Your Final Answer</div>
-            <textarea id="answer" class="answer-box" placeholder="Paste or write your final answer here..." ${state.started ? '' : 'disabled'}>${escapeHtml(state.answerDraft)}</textarea>
-            <div class="actions"><button class="success-btn" id="submitAnswer" type="button" aria-label="Verify answer" ${state.submitting ? 'disabled' : ''}>${state.submitting ? 'Verifying...' : 'Verify Answer'}</button></div>
-            <div id="saveStatus" class="save-status" aria-live="polite">${escapeHtml(state.saveStatus || 'Draft saved locally')}</div>
+
+          <article class="card panel task-interaction-card">
+            <div class="interaction-workflow-banner">
+              <div class="workflow-step-pill ${hasCollaborated ? 'done' : 'current'}">
+                <span class="step-num">1</span>
+                <span>Ask AI Assistant</span>
+              </div>
+              <span class="step-chevron">➔</span>
+              <div class="workflow-step-pill ${hasCollaborated ? 'current' : ''}">
+                <span class="step-num">2</span>
+                <span>Analyze Response</span>
+              </div>
+              <span class="step-chevron">➔</span>
+              <div class="workflow-step-pill">
+                <span class="step-num">3</span>
+                <span>Proceed</span>
+              </div>
+            </div>
+
+            <div class="collaboration-status-row">
+              <div class="status-indicator-col">
+                <span class="status-dot ${hasCollaborated ? 'active' : 'idle'}"></span>
+                <span class="status-text">
+                  ${hasCollaborated
+      ? `Collaborated with <strong>${escapeHtml(state.selectedLLM)}</strong> (${userPrompts.length} prompt${userPrompts.length === 1 ? '' : 's'} exchanged)`
+      : state.selectedLLM
+        ? `Using <strong>${escapeHtml(state.selectedLLM)}</strong> — ask your question in the panel to the right`
+        : 'Choose an AI model in the right panel to begin'}
+                </span>
+              </div>
+              <div id="saveStatus" class="save-status" aria-live="polite">${escapeHtml(state.saveStatus || 'Ready for collaboration')}</div>
+            </div>
+
+            <div class="actions" style="margin-top:1.25rem;">
+              <button class="primary proceed-task-btn" id="submitAnswer" type="button" ${state.submitting ? 'disabled' : ''}>
+                <span>${state.submitting ? 'Submitting & Advancing…' : 'I have reviewed the AI response · Proceed to Next Task'}</span>
+                <strong style="margin-left:8px;font-size:1.15rem;">➔</strong>
+              </button>
+            </div>
             <div class="error" id="examError"></div>
           </article>
+
           <nav class="card panel question-navigation" aria-label="Question navigation">
-            <button class="secondary" id="previousQuestion" type="button" ${currentQuestionIndex() === 0 || state.submitting ? 'disabled' : ''}>Previous</button>
-            <span>Question ${currentQuestionIndex() + 1} of ${allQuestionLocations().length}</span>
-            <button class="secondary" id="skipQuestion" type="button" ${state.submitting ? 'disabled' : ''}>Skip question</button>
+            <button class="secondary" id="previousQuestion" type="button" ${state.current === 0 || state.submitting ? 'disabled' : ''}>Previous Task</button>
+            <span>Task ${state.current + 1} of ${totalTasks}</span>
+            <button class="secondary" id="skipQuestion" type="button" ${state.submitting ? 'disabled' : ''}>Skip Task</button>
           </nav>
         </section>
         <aside class="stack">
@@ -1819,7 +1874,7 @@ async function captureSharedTrackingFrame() {
       facialResult = { status: 'rejected', reason: error };
     }
 
-      // ---------------------------------------------------------
+    // ---------------------------------------------------------
     // 6. HANDLE EYE RESULT
     // ---------------------------------------------------------
 
@@ -1983,15 +2038,15 @@ async function captureSharedTrackingFrame() {
 async function sendMonitoringHeartbeat(status = 'active') {
   if (!state.participant) return;
   const q = currentQuestion();
-  const completedParts = questions.slice(0, state.current).reduce((total, question) => total + question.subquestions.length, 0) + state.subquestion;
-  const totalParts = questions.reduce((total, question) => total + question.subquestions.length, 0);
+  const totalParts = (state.questions && state.questions.length) || 6;
+  const completedParts = state.current;
   const progressPercent = status === 'completed' ? 100 : Math.round(completedParts / totalParts * 1000) / 10;
   return safePut('/monitoring/heartbeat', {
     participant_id: state.participant.participant_id,
     status,
     question_id: q.id,
     question_number: state.current + 1,
-    subquestion_number: state.subquestion + 1,
+    subquestion_number: 1,
     progress_percent: progressPercent,
     question_started: state.started,
     inactivity_seconds: Math.floor((Date.now() - state.lastInteractionAt) / 1000),
@@ -2028,13 +2083,22 @@ function renderCompilerResult() {
 
 function bindExamEvents(q) {
   const answerEditor = document.getElementById('answer');
-  document.getElementById('aiModelSelect').addEventListener('change', async event => {
-    if (!event.target.value) return;
-    state.selectedLLM = event.target.value;
-    if (state.started) renderExam();
-    else await startCurrentQuestion(q);
-  });
-  document.getElementById('answer').addEventListener('input', event => { state.answerDraft = event.target.value; setSaveStatus('Draft saved locally'); saveParticipantState(); });
+  if (answerEditor) {
+    answerEditor.addEventListener('input', event => {
+      state.answerDraft = event.target.value;
+      setSaveStatus('Draft saved locally');
+      saveParticipantState();
+    });
+  }
+  const aiModelSelect = document.getElementById('aiModelSelect');
+  if (aiModelSelect) {
+    aiModelSelect.addEventListener('change', async event => {
+      if (!event.target.value) return;
+      state.selectedLLM = event.target.value;
+      if (state.started) renderExam();
+      else await startCurrentQuestion(q);
+    });
+  }
   const codeEditor = document.getElementById('codeEditor');
   if (codeEditor) {
     codeEditor.addEventListener('keydown', event => {
@@ -2071,9 +2135,10 @@ function bindExamEvents(q) {
       saveParticipantState();
     });
     codeEditor.addEventListener('input', event => { state.codeDraft = event.target.value; setSaveStatus('Draft saved locally'); saveParticipantState(); });
-    document.getElementById('compilerLanguage').addEventListener('change', event => { state.compilerLanguage = event.target.value; renderExam(); });
-    document.getElementById('compilerInput').addEventListener('input', event => { state.compilerInput = event.target.value; saveParticipantState(); });
-    document.getElementById('runCode').onclick = runCode;
+    document.getElementById('compilerLanguage')?.addEventListener('change', event => { state.compilerLanguage = event.target.value; renderExam(); });
+    document.getElementById('compilerInput')?.addEventListener('input', event => { state.compilerInput = event.target.value; saveParticipantState(); });
+    const runBtn = document.getElementById('runCode');
+    if (runBtn) runBtn.onclick = runCode;
   }
   const sendChatButton = document.getElementById('sendChat');
   const stopChatButton = document.getElementById('stopChat');
@@ -2086,17 +2151,24 @@ function bindExamEvents(q) {
     chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
   }
   if (stopChatButton) stopChatButton.onclick = stopChat;
-  document.getElementById('submitAnswer').onclick = submitCurrentAnswer;
-  document.getElementById('previousQuestion').onclick = goToPreviousQuestion;
-  document.getElementById('skipQuestion').onclick = skipCurrentQuestion;
+  const submitBtn = document.getElementById('submitAnswer');
+  if (submitBtn) submitBtn.onclick = submitCurrentAnswer;
+  const prevBtn = document.getElementById('previousQuestion');
+  if (prevBtn) prevBtn.onclick = goToPreviousQuestion;
+  const skipBtn = document.getElementById('skipQuestion');
+  if (skipBtn) skipBtn.onclick = skipCurrentQuestion;
   document.querySelectorAll('[data-question-index]').forEach(button => {
     button.onclick = () => navigateToQuestion(Number(button.dataset.questionIndex));
   });
-  document.getElementById('endSession').onclick = () => {
-    if (state.finishing) return;
-    if (!window.confirm('End this assessment now? Your saved data will be submitted.')) return;
-    finishAssessment(true);
-  };
+  const endSessionBtn = document.getElementById('endSession');
+  if (endSessionBtn) {
+    endSessionBtn.onclick = () => {
+      if (state.finishing) return;
+      if (!window.confirm('End this assessment early? You will proceed to the NASA-TLX workload verification to measure cognitive load change from your baseline.')) return;
+      prepareQuestionNavigation();
+      renderNasaTlxAssessment(true);
+    };
+  }
 }
 
 function prepareQuestionNavigation() {
@@ -2111,15 +2183,15 @@ function prepareQuestionNavigation() {
 }
 
 function navigateToQuestion(index) {
-  const locations = allQuestionLocations();
-  const location = locations[index];
-  if (!location || index === currentQuestionIndex() || state.submitting) return;
+  const totalTasks = (state.questions && state.questions.length) || 6;
+  if (index < 0 || index >= totalTasks || index === state.current || state.submitting) return;
   prepareQuestionNavigation();
-  state.current = location.taskIndex;
-  state.subquestion = location.subquestionIndex;
+  state.current = index;
+  state.subquestion = 0;
   state.selectedLLM = '';
   state.compilerResult = null;
-  state.questionTransition = `Question changed: Task ${location.taskIndex + 1}, Question ${location.subquestionIndex + 1} of 3`;
+  const nextQuestion = currentQuestion();
+  state.questionTransition = `Task changed: Task ${state.current + 1} of ${totalTasks} - ${nextQuestion.title || nextQuestion.topic}`;
   restoreQuestionDraft();
   renderExam();
 }
@@ -2127,8 +2199,19 @@ function navigateToQuestion(index) {
 async function startCurrentQuestion(q) {
   if (!state.selectedLLM || state.started) return;
   const startTime = Date.now();
+  const totalTasks = (state.questions && state.questions.length) || 6;
   try {
-    await safePost('/questions/start', { participant_id: state.participant.participant_id, topic_id: q.topicId, question_id: q.id, question_number: state.current + 1, subquestion_number: state.subquestion + 1, question_part: q.questionPart, llm: state.selectedLLM, trial_number: state.current * questions[state.current].subquestions.length + state.subquestion + 1, started_at: new Date(startTime).toISOString() }, state.participantSessionToken);
+    await safePost('/questions/start', {
+      participant_id: state.participant.participant_id,
+      topic_id: q.topicId || `TASK-${state.current + 1}`,
+      question_id: q.id,
+      question_number: state.current + 1,
+      subquestion_number: 1,
+      question_part: q.questionPart || `Task ${state.current + 1} of ${totalTasks}`,
+      llm: state.selectedLLM,
+      trial_number: state.current + 1,
+      started_at: new Date(startTime).toISOString()
+    }, state.participantSessionToken);
     state.started = true;
     state.startTime = startTime;
     state.trackingActive = true;
@@ -2163,29 +2246,25 @@ function goToPreviousQuestion() {
 }
 
 function skipCurrentQuestion() {
-  if (!window.confirm('Skip this question? It will be recorded as skipped.')) return;
+  if (!window.confirm('Skip this task? It will be recorded as skipped.')) return;
   if (state.submitting) return;
   prepareQuestionNavigation();
   const skippedId = currentQuestion().id;
   if (!state.skippedQuestionIds.includes(skippedId)) state.skippedQuestionIds.push(skippedId);
-  const completedLastTopic = state.current === questions.length - 1;
-  const completedLastSubquestion = state.subquestion === questions[state.current].subquestions.length - 1;
-  if (completedLastTopic && completedLastSubquestion) {
+  const totalTasks = (state.questions && state.questions.length) || 6;
+  const completedLastTask = state.current >= totalTasks - 1;
+  if (completedLastTask) {
     state.answerDraft = '';
     state.codeDraft = '';
     state.messages = [];
     return renderNasaTlxAssessment();
   }
-  if (completedLastSubquestion) {
-    state.current++;
-    state.subquestion = 0;
-  } else {
-    state.subquestion++;
-  }
+  state.current++;
+  state.subquestion = 0;
   state.selectedLLM = '';
   state.compilerResult = null;
   const nextQuestion = currentQuestion();
-  state.questionTransition = `Question changed: ${nextQuestion.topic} - ${nextQuestion.questionPart}`;
+  state.questionTransition = `Task changed: ${nextQuestion.title || nextQuestion.topic}`;
   restoreQuestionDraft();
   renderExam();
 }
@@ -2227,18 +2306,19 @@ async function sendChat() {
 
   state.messages.push({ role: 'user', content: text });
   input.value = '';
+  const totalTasks = (state.questions && state.questions.length) || 6;
   const q = currentQuestion();
   const payload = {
     participant_id: state.participant.participant_id,
-    topic_id: q.topicId,
+    topic_id: q.topicId || `TASK-${state.current + 1}`,
     question_id: q.id,
     elapsed_second: promptElapsedSecond,
     task_name: q.title,
     question_text: q.text,
     question_number: state.current + 1,
-    subquestion_number: state.subquestion + 1,
-    question_part: q.questionPart,
-    trial_number: state.current * questions[state.current].subquestions.length + state.subquestion + 1,
+    subquestion_number: 1,
+    question_part: q.questionPart || `Task ${state.current + 1} of ${totalTasks}`,
+    trial_number: state.current + 1,
     provider: state.selectedLLM,
     message: text,
     history: state.messages.map(message => ({ ...message }))
@@ -2289,10 +2369,12 @@ function stopChat() {
 
 async function submitCurrentAnswer() {
   if (state.submitting) return;
-  const answer = document.getElementById('answer').value.trim();
-  if (!state.started) return showExamError('Select an LLM to begin the question.');
-  if (!state.selectedLLM) return showExamError('Select an LLM first.');
-  if (answer.length < 15) return showExamError('Please provide a complete answer before submitting.');
+  if (!state.started) return showExamError('Please select an AI model to begin collaboration on this task.');
+  if (!state.selectedLLM) return showExamError('Please select an AI model first.');
+  const userPrompts = state.messages.filter(m => m.role === 'user');
+  if (userPrompts.length === 0) {
+    return showExamError('Please ask the AI assistant at least one question regarding this task before proceeding.');
+  }
   state.submitting = true;
 
   const activeQuestionId = currentQuestion().id;
@@ -2305,17 +2387,21 @@ async function submitCurrentAnswer() {
   const finalBehaviorSecond = behaviorSecondBuffer;
   behaviorSecondBuffer = null;
 
+  const totalTasks = (state.questions && state.questions.length) || 6;
+  const promptCount = userPrompts.length;
+  const answer = `Task reviewed and completed via AI collaboration with ${state.selectedLLM} (${promptCount} prompt${promptCount === 1 ? '' : 's'} exchanged).`;
   state.answerDraft = answer;
+
   const q = currentQuestion();
   const record = {
     participant_id: state.participant.participant_id,
-    topic_id: q.topicId,
+    topic_id: q.topicId || `TASK-${state.current + 1}`,
     question_id: q.id,
     question_number: state.current + 1,
-    subquestion_number: state.subquestion + 1,
-    question_part: q.questionPart,
+    subquestion_number: 1,
+    question_part: q.questionPart || `Task ${state.current + 1} of ${totalTasks}`,
     llm: state.selectedLLM,
-    trial_number: state.current * questions[state.current].subquestions.length + state.subquestion + 1,
+    trial_number: state.current + 1,
     answer,
     paas_rating: null,
     started_at: new Date(state.startTime).toISOString(),
@@ -2325,9 +2411,9 @@ async function submitCurrentAnswer() {
     interaction_summary: { ...state.tracking }
   };
   try {
-    setSaveStatus('Saving answer to PostgreSQL…');
+    setSaveStatus('Saving response to PostgreSQL…');
     await safePost('/answers/submit', record, state.participantSessionToken);
-    setSaveStatus('Answer saved to PostgreSQL', 'success');
+    setSaveStatus('Task completed and saved', 'success');
     void Promise.allSettled([
       saveKeyboardWithRetry(keyboardTracker.finalize(), 'question_submit', true),
       mouseTracker.flush('question_submit', true),
@@ -2342,26 +2428,21 @@ async function submitCurrentAnswer() {
     }
 
     renderExam();
-    setSaveStatus('Save failed — retry the answer', 'error');
-    showExamError(`Answer was not saved: ${error.message}. Please retry.`);
+    setSaveStatus('Save failed — retry proceeding', 'error');
+    showExamError(`Task progress was not saved: ${error.message}. Please retry.`);
     return;
   }
   mouseTracker.stop();
   state.answers.push(record);
-  const completedLastSubquestion = state.subquestion === questions[state.current].subquestions.length - 1;
-  const completedLastTopic = state.current === questions.length - 1;
-  if (completedLastSubquestion && completedLastTopic) {
+  const completedLastTask = state.current >= totalTasks - 1;
+  if (completedLastTask) {
     state.submitting = false;
     state.started = false;
     state.startTime = null;
     return renderNasaTlxAssessment();
   }
-  if (completedLastSubquestion) {
-    state.current++;
-    state.subquestion = 0;
-  } else {
-    state.subquestion++;
-  }
+  state.current++;
+  state.subquestion = 0;
   state.started = false;
   state.startTime = null;
   state.paas = null;
@@ -2404,28 +2485,197 @@ function nasaTlxRatingsComplete() {
 
 // Final survey override: keep the visible end-of-assessment control on the
 // same 0-10 scale as the baseline survey and the PostgreSQL contract.
-function renderNasaTlxAssessment() {
+function renderNasaTlxAssessment(endedEarly = false) {
   state.assessmentStage = 'nasa';
+  state.endedEarly = Boolean(endedEarly);
   state.questionRatings = [];
   clearInterval(state.timerHandle);
+
+  // Pre-populate missing dimensions from baseline or default 5 so verification can start immediately
+  NASA_TLX_DIMENSIONS.forEach(d => {
+    if (!Number.isFinite(state.nasaTlx[d.key])) {
+      state.nasaTlx[d.key] = Number.isFinite(state.baselineNasaTlx[d.key]) ? state.baselineNasaTlx[d.key] : 5;
+    }
+  });
+
+  const getBaselineAvg = () => {
+    const vals = NASA_TLX_DIMENSIONS.map(d => state.baselineNasaTlx[d.key]).filter(Number.isFinite);
+    return vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  };
+
+  const getPostAvg = () => {
+    const vals = NASA_TLX_DIMENSIONS.map(d => state.nasaTlx[d.key]).filter(Number.isFinite);
+    return vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  };
+
+  const getStrainBadgeInfo = (delta, pct) => {
+    if (delta >= 1.8 || pct >= 35) {
+      return { label: 'High Strain Spike', pillClass: 'strain-high', icon: '▲▲', desc: 'Significant cognitive load elevation from baseline' };
+    } else if (delta >= 0.5 || pct >= 10) {
+      return { label: 'Moderate Load Increase', pillClass: 'strain-moderate', icon: '▲', desc: 'Noticeable workload rise during collaboration' };
+    } else if (delta <= -0.5) {
+      return { label: 'Cognitive Recovery', pillClass: 'strain-recovery', icon: '▼', desc: 'Workload reduced below pre-task baseline' };
+    } else {
+      return { label: 'Stable Workload', pillClass: 'strain-stable', icon: '■', desc: 'Workload consistent with baseline' };
+    }
+  };
+
+  const baseAvg = getBaselineAvg();
+  const postAvg = getPostAvg();
+  const delta = (baseAvg !== null && postAvg !== null) ? Number((postAvg - baseAvg).toFixed(1)) : 0;
+  const pct = (baseAvg !== null && baseAvg > 0) ? Math.round((delta / baseAvg) * 100) : 0;
+  const strain = getStrainBadgeInfo(delta, pct);
+
   const cards = NASA_TLX_DIMENSIONS.map(d => {
-    const selected = Number.isFinite(state.nasaTlx[d.key]) && state.nasaTlx[d.key] >= 0 && state.nasaTlx[d.key] <= 10;
-    const value = selected ? state.nasaTlx[d.key] : 5;
-    return `<article class="survey-item"><div class="nasa-item-heading"><h3>${d.label}</h3><output class="nasa-value" data-nasa-output="${d.key}">${selected ? value : '—'}</output></div><p>${d.help}</p><input class="nasa-range" type="range" min="0" max="10" step="1" value="${value}" data-nasa-scale="${d.key}" aria-label="${d.label} scale from 0 to 10"><div class="scale-labels"><span>0</span><span>10</span></div></article>`;
+    const baseVal = Number.isFinite(state.baselineNasaTlx[d.key]) ? state.baselineNasaTlx[d.key] : 5;
+    const currentVal = Number.isFinite(state.nasaTlx[d.key]) ? state.nasaTlx[d.key] : baseVal;
+    const dimDelta = currentVal - baseVal;
+    const deltaBadgeClass = dimDelta > 0 ? 'delta-up' : dimDelta < 0 ? 'delta-down' : 'delta-flat';
+    const deltaBadgeText = dimDelta > 0 ? `+${dimDelta} ▲` : dimDelta < 0 ? `${dimDelta} ▼` : '= 0 (At baseline)';
+
+    return `
+      <article class="survey-item nasa-verification-item">
+        <div class="nasa-item-heading">
+          <div>
+            <h3>${d.label}</h3>
+            <div class="dim-baseline-hint">Pre-Task Baseline: <strong>${baseVal} / 10</strong></div>
+          </div>
+          <div class="nasa-value-wrap">
+            <output class="nasa-value" data-nasa-output="${d.key}">${currentVal}</output>
+            <span class="dim-delta-badge ${deltaBadgeClass}" data-delta-badge="${d.key}">${deltaBadgeText}</span>
+          </div>
+        </div>
+        <p>${d.help}</p>
+        <input class="nasa-range" type="range" min="0" max="10" step="1" value="${currentVal}" data-nasa-scale="${d.key}" data-base-val="${baseVal}" aria-label="${d.label} scale from 0 to 10">
+        <div class="scale-labels">
+          <span>0 (Low)</span>
+          <span>Baseline: ${baseVal}</span>
+          <span>10 (High)</span>
+        </div>
+      </article>
+    `;
   }).join('');
-  const score = nasaTlxRatingsComplete() ? (Object.values(state.nasaTlx).reduce((sum, value) => sum + value, 0) / NASA_TLX_DIMENSIONS.length).toFixed(1) : '—';
-  app.innerHTML = `<div class="survey-screen"><section class="card survey-card"><div class="survey-kicker">Final feedback</div><h1>NASA-TLX workload survey</h1><p class="survey-intro">Rate the workload you experienced during the assessment using a 0–10 scale.</p><div class="nasa-grid">${cards}</div><div class="nasa-overall" id="nasaOverallPreview">Overall score: ${score} <small>(average of the six ratings)</small></div><button class="primary" id="submitAssessment" type="button" ${nasaTlxRatingsComplete() ? '' : 'disabled'}>Submit feedback and return to login</button><div class="error" id="surveyError"></div></section></div>`;
-  document.querySelectorAll('[data-nasa-scale]').forEach(input => input.addEventListener('input', event => {
-    state.nasaTlx[event.target.dataset.nasaScale] = Number(event.target.value);
-    saveParticipantState();
-    const output = document.querySelector(`[data-nasa-output="${event.target.dataset.nasaScale}"]`);
-    if (output) output.textContent = event.target.value;
-    const overall = document.getElementById('nasaOverallPreview');
-    if (overall) overall.innerHTML = `Overall score: ${nasaTlxRatingsComplete() ? (Object.values(state.nasaTlx).reduce((sum, value) => sum + value, 0) / NASA_TLX_DIMENSIONS.length).toFixed(1) : '—'} <small>(average of the six ratings)</small>`;
-    const submit = document.getElementById('submitAssessment');
-    if (submit) submit.disabled = !nasaTlxRatingsComplete();
-  }));
-  document.getElementById('submitAssessment').addEventListener('click', () => finishAssessment(false));
+
+  const kickerText = endedEarly
+    ? 'Session Concluded Early • NASA-TLX Workload Verification'
+    : 'Tasks Completed • NASA-TLX Workload Verification';
+  const headingText = endedEarly
+    ? 'Verify Cognitive Load Increase (Early Exit)'
+    : 'Verify Post-Task Cognitive Load';
+  const introText = endedEarly
+    ? 'You chose to conclude this session before completing all 6 tasks. Rate your perceived cognitive workload across all dimensions so the system can measure how much your cognitive load increased from your pre-task baseline.'
+    : 'You have completed all collaborative tasks! Compare your current perceived workload against your pre-task baseline to verify how much cognitive load has increased during the session.';
+
+  const deltaFormatted = delta > 0 ? `+${delta}` : `${delta}`;
+  const pctFormatted = pct > 0 ? `+${pct}% from baseline` : pct < 0 ? `${pct}% from baseline` : 'At baseline (0%)';
+
+  app.innerHTML = `
+    <div class="survey-screen">
+      <section class="card survey-card">
+        <div class="survey-kicker">${kickerText}</div>
+        <h1>${headingText}</h1>
+        <p class="survey-intro">${introText}</p>
+
+        <div class="nasa-comparison-summary">
+          <div class="nasa-kpi-card">
+            <div class="nasa-kpi-title"><span>⏱️</span> Pre-Task Baseline</div>
+            <div class="nasa-kpi-val-row">
+              <span class="nasa-kpi-val" id="summaryBaselineVal">${baseAvg !== null ? baseAvg.toFixed(1) : '—'}<small> / 10</small></span>
+            </div>
+            <div class="nasa-kpi-sub">Baseline recorded before tasks</div>
+          </div>
+
+          <div class="nasa-kpi-card">
+            <div class="nasa-kpi-title"><span>🧠</span> Current Workload</div>
+            <div class="nasa-kpi-val-row">
+              <span class="nasa-kpi-val" id="summaryPostVal">${postAvg !== null ? postAvg.toFixed(1) : '—'}<small> / 10</small></span>
+            </div>
+            <div class="nasa-kpi-sub">Subjective post-task workload average</div>
+          </div>
+
+          <div class="nasa-kpi-card highlight">
+            <div class="nasa-kpi-title"><span>📈</span> Load Change from Baseline</div>
+            <div class="nasa-kpi-val-row">
+              <span class="nasa-kpi-val" id="summaryDeltaVal">${deltaFormatted}</span>
+              <span class="summary-pct-pill ${strain.pillClass}" id="summaryPctBadge">${strain.icon} ${pctFormatted}</span>
+            </div>
+            <div class="nasa-kpi-sub" id="summaryStrainDesc">${strain.desc}</div>
+          </div>
+        </div>
+
+        <div class="nasa-grid">${cards}</div>
+
+        <div class="nasa-overall" id="nasaOverallPreview">
+          Post-Task Score: <strong>${postAvg !== null ? postAvg.toFixed(1) : '—'}</strong> / 10
+          &nbsp;•&nbsp; Baseline: <strong>${baseAvg !== null ? baseAvg.toFixed(1) : '—'}</strong> / 10
+          &nbsp;•&nbsp; Net Delta: <strong style="color:${delta > 0 ? '#f87171' : delta < 0 ? '#34d399' : '#93c5fd'}">${deltaFormatted} (${pctFormatted})</strong>
+        </div>
+
+        <button class="primary" id="submitAssessment" type="button" ${nasaTlxRatingsComplete() ? '' : 'disabled'}>
+          ${endedEarly ? 'Submit Verification & End Session' : 'Submit Verification & Complete Assessment'}
+        </button>
+        <div class="error" id="surveyError"></div>
+      </section>
+    </div>
+  `;
+
+  document.querySelectorAll('[data-nasa-scale]').forEach(input => {
+    input.addEventListener('input', event => {
+      const key = event.target.dataset.nasaScale;
+      const baseVal = Number(event.target.dataset.baseVal || 5);
+      const val = Number(event.target.value);
+      state.nasaTlx[key] = val;
+      saveParticipantState();
+
+      // Update item output & delta badge
+      const output = document.querySelector(`[data-nasa-output="${key}"]`);
+      if (output) output.textContent = val;
+      const badge = document.querySelector(`[data-delta-badge="${key}"]`);
+      const dimDelta = val - baseVal;
+      if (badge) {
+        badge.className = `dim-delta-badge ${dimDelta > 0 ? 'delta-up' : dimDelta < 0 ? 'delta-down' : 'delta-flat'}`;
+        badge.textContent = dimDelta > 0 ? `+${dimDelta} ▲` : dimDelta < 0 ? `${dimDelta} ▼` : '= 0 (At baseline)';
+      }
+
+      // Recompute overall
+      const curBaseAvg = getBaselineAvg();
+      const curPostAvg = getPostAvg();
+      const curDelta = (curBaseAvg !== null && curPostAvg !== null) ? Number((curPostAvg - curBaseAvg).toFixed(1)) : 0;
+      const curPct = (curBaseAvg !== null && curBaseAvg > 0) ? Math.round((curDelta / curBaseAvg) * 100) : 0;
+      const curStrain = getStrainBadgeInfo(curDelta, curPct);
+
+      const postValEl = document.getElementById('summaryPostVal');
+      if (postValEl && curPostAvg !== null) postValEl.innerHTML = `${curPostAvg.toFixed(1)}<small> / 10</small>`;
+      const deltaValEl = document.getElementById('summaryDeltaVal');
+      if (deltaValEl) deltaValEl.textContent = curDelta > 0 ? `+${curDelta}` : `${curDelta}`;
+      const pctBadgeEl = document.getElementById('summaryPctBadge');
+      if (pctBadgeEl) {
+        pctBadgeEl.className = `summary-pct-pill ${curStrain.pillClass}`;
+        pctBadgeEl.textContent = `${curStrain.icon} ${curPct > 0 ? `+${curPct}% from baseline` : curPct < 0 ? `${curPct}% from baseline` : 'At baseline (0%)'}`;
+      }
+      const strainDescEl = document.getElementById('summaryStrainDesc');
+      if (strainDescEl) strainDescEl.textContent = curStrain.desc;
+
+      const overall = document.getElementById('nasaOverallPreview');
+      if (overall && curPostAvg !== null) {
+        const curDeltaStr = curDelta > 0 ? `+${curDelta}` : `${curDelta}`;
+        const curPctStr = curPct > 0 ? `+${curPct}%` : `${curPct}%`;
+        overall.innerHTML = `Post-Task Score: <strong>${curPostAvg.toFixed(1)}</strong> / 10 &nbsp;•&nbsp; Baseline: <strong>${curBaseAvg !== null ? curBaseAvg.toFixed(1) : '—'}</strong> / 10 &nbsp;•&nbsp; Net Delta: <strong style="color:${curDelta > 0 ? '#f87171' : curDelta < 0 ? '#34d399' : '#93c5fd'}">${curDeltaStr} (${curPctStr})</strong>`;
+      }
+
+      const submit = document.getElementById('submitAssessment');
+      if (submit) submit.disabled = !nasaTlxRatingsComplete();
+    });
+  });
+
+  const submitBtn = document.getElementById('submitAssessment');
+  if (submitBtn) {
+    submitBtn.addEventListener('click', () => {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving verification…';
+      finishAssessment(state.endedEarly);
+    });
+  }
   saveParticipantState();
 }
 
@@ -2473,7 +2723,7 @@ async function finishAssessment(endedEarly) {
     session_id: state.sessionId,
     ended_early: endedEarly,
     overall_paas_rating: endedEarly ? null : state.paas,
-    nasa_tlx: endedEarly ? null : state.nasaTlx,
+    nasa_tlx: (state.nasaTlx && nasaTlxRatingsComplete()) ? state.nasaTlx : null,
     question_ratings: [],
     answers: state.answers,
     interaction_summary: state.tracking
@@ -2502,6 +2752,48 @@ async function finishAssessment(endedEarly) {
     localStorage.setItem('cognitrack_pending_session', JSON.stringify(payload));
   }
   if (!completionError) localStorage.removeItem('cognitrack_pending_session');
+  // Compute workload increase verification metrics for display before resetting
+  const baseScores = NASA_TLX_DIMENSIONS.map(d => state.baselineNasaTlx?.[d.key]).filter(Number.isFinite);
+  const baseAvg = baseScores.length > 0 ? (baseScores.reduce((a, b) => a + b, 0) / baseScores.length) : null;
+
+  const currentNasa = (state.nasaTlx && Object.keys(state.nasaTlx).length > 0) ? state.nasaTlx : (payload.nasa_tlx || {});
+  const postScores = NASA_TLX_DIMENSIONS.map(d => currentNasa?.[d.key]).filter(Number.isFinite);
+  const postAvg = postScores.length > 0 ? (postScores.reduce((a, b) => a + b, 0) / postScores.length) : null;
+
+  const loadDelta = (baseAvg !== null && postAvg !== null) ? Number((postAvg - baseAvg).toFixed(1)) : null;
+  const pctChange = (loadDelta !== null && baseAvg > 0) ? Math.round((loadDelta / baseAvg) * 100) : null;
+  const deltaClass = loadDelta !== null ? (loadDelta > 0 ? 'cw-up' : loadDelta < 0 ? 'cw-down' : 'cw-flat') : 'cw-flat';
+  const deltaFormatted = loadDelta !== null ? (loadDelta > 0 ? `+${loadDelta}` : `${loadDelta}`) : '—';
+  const pctFormatted = pctChange !== null ? (pctChange > 0 ? `+${pctChange}%` : `${pctChange}%`) : '';
+  const strainLabel = (loadDelta !== null && loadDelta >= 1.8) ? 'High Strain Spike' : (loadDelta !== null && loadDelta >= 0.5) ? 'Moderate Increase' : (loadDelta !== null && loadDelta <= -0.5) ? 'Cognitive Recovery' : 'Stable Workload';
+  const strainClass = (loadDelta !== null && loadDelta >= 1.8) ? 'strain-high' : (loadDelta !== null && loadDelta >= 0.5) ? 'strain-moderate' : (loadDelta !== null && loadDelta <= -0.5) ? 'strain-recovery' : 'strain-stable';
+
+  const workloadVerificationHtml = (baseAvg !== null || postAvg !== null) ? `
+    <div class="completion-workload-summary">
+      <div class="completion-workload-title">
+        <span>📊 NASA-TLX Workload Verification</span>
+        <span class="summary-pct-pill ${strainClass}">${strainLabel}</span>
+      </div>
+      <div class="completion-workload-grid">
+        <div class="cw-metric">
+          <span class="cw-label">Pre-Task Baseline</span>
+          <span class="cw-val">${baseAvg !== null ? baseAvg.toFixed(1) : '—'} <small>/ 10</small></span>
+        </div>
+        <div class="cw-metric">
+          <span class="cw-label">Post-Task Workload</span>
+          <span class="cw-val">${postAvg !== null ? postAvg.toFixed(1) : '—'} <small>/ 10</small></span>
+        </div>
+        <div class="cw-metric">
+          <span class="cw-label">Cognitive Load Delta</span>
+          <span class="cw-val ${deltaClass}">
+            ${deltaFormatted} ${pctFormatted ? `<small>(${pctFormatted})</small>` : ''}
+          </span>
+        </div>
+      </div>
+      <p class="cw-note">Pre-task baseline vs. post-task subjective strain delta has been verified and permanently recorded to the research dataset.</p>
+    </div>
+  ` : '';
+
   clearParticipantState();
   clearInterval(monitoringTimer);
   await sendMonitoringHeartbeat(endedEarly ? 'ended' : 'completed').catch(error => console.warn('Final monitoring heartbeat failed:', error));
@@ -2512,8 +2804,20 @@ async function finishAssessment(endedEarly) {
     const heading = completionError ? 'Session Ended' : 'Session Ended Successfully';
     const statusMessage = completionError
       ? `Your session has ended, but the final save could not be confirmed: ${escapeHtml(completionError)}`
-      : 'Your session has ended successfully. Your completed responses have been saved.';
-    app.innerHTML = `<div class="success-screen"><div class="card success-card"><div class="success-icon">✓</div><h1>${heading}</h1><p style="color:var(--muted);font-size:18px"><strong>Candidate ID:</strong> ${candidateId}</p><p>${statusMessage}</p><p style="color:var(--muted)">Returning to the login page in a few seconds.</p><button class="primary" id="restart" type="button">Return to Login Now</button></div></div>`;
+      : 'Your session has ended early. Your NASA-TLX load verification and completed responses have been recorded.';
+    app.innerHTML = `
+      <div class="success-screen">
+        <div class="card success-card">
+          <div class="success-icon">✓</div>
+          <h1>${heading}</h1>
+          <p style="color:var(--muted);font-size:18px"><strong>Candidate ID:</strong> ${candidateId}</p>
+          <p>${statusMessage}</p>
+          ${workloadVerificationHtml}
+          <p style="color:var(--muted)">Returning to the login page shortly.</p>
+          <button class="primary" id="restart" type="button">Return to Login Now</button>
+        </div>
+      </div>
+    `;
     let returnedToLogin = false;
     const returnToLogin = () => {
       if (returnedToLogin) return;
@@ -2522,12 +2826,34 @@ async function finishAssessment(endedEarly) {
       renderLogin();
     };
     document.getElementById('restart').onclick = returnToLogin;
-    window.setTimeout(returnToLogin, 3500);
+    window.setTimeout(returnToLogin, 6000);
     return;
   }
-  app.innerHTML = `<div class="success-screen"><div class="card success-card"><div class="success-icon">✓</div><h1>${endedEarly ? 'Session Ended' : 'Assessment Submitted Successfully'}</h1><p style="color:var(--muted);font-size:18px">Participant ID: ${state.participant.participant_id}</p><p>${endedEarly ? 'Your completed responses have been saved.' : 'All three main questions and three related sub-questions are saved.'}</p><button class="primary" id="restart">Return to Login</button></div></div>`;
+  app.innerHTML = `
+    <div class="success-screen">
+      <div class="card success-card">
+        <div class="success-icon">✓</div>
+        <h1>Assessment Submitted Successfully</h1>
+        <p style="color:var(--muted);font-size:18px">Participant ID: ${escapeHtml(state.participant?.participant_id || '')}</p>
+        <p>All dynamic collaboration tasks, multimodal telemetry, and your NASA-TLX workload verification have been submitted.</p>
+        ${workloadVerificationHtml}
+        <button class="primary" id="restart">Return to Login</button>
+      </div>
+    </div>
+  `;
   if (completionError) {
-    app.innerHTML = `<div class="success-screen"><div class="card success-card"><div class="success-icon">!</div><h1>Session Ended</h1><p style="color:var(--muted);font-size:18px">Participant ID: ${escapeHtml(state.participant.participant_id)}</p><p>You have been logged out. The server could not confirm the final save: ${escapeHtml(completionError)}</p><button class="primary" id="restart">Return to Login</button></div></div>`;
+    app.innerHTML = `
+      <div class="success-screen">
+        <div class="card success-card">
+          <div class="success-icon">!</div>
+          <h1>Session Ended</h1>
+          <p style="color:var(--muted);font-size:18px">Participant ID: ${escapeHtml(state.participant?.participant_id || '')}</p>
+          <p>You have been logged out. The server could not confirm the final save: ${escapeHtml(completionError)}</p>
+          ${workloadVerificationHtml}
+          <button class="primary" id="restart">Return to Login</button>
+        </div>
+      </div>
+    `;
   }
   let returnedToLogin = false;
   const returnToLogin = () => {
@@ -2537,7 +2863,7 @@ async function finishAssessment(endedEarly) {
     renderLogin();
   };
   document.getElementById('restart').onclick = returnToLogin;
-  window.setTimeout(returnToLogin, completionError ? 5000 : 2500);
+  window.setTimeout(returnToLogin, completionError ? 6000 : 5000);
 }
 
 function startDisplayTimer() {
@@ -2555,7 +2881,8 @@ function startDisplayTimer() {
     if (remaining === 0 && !state.timeLimitReached) {
       state.timeLimitReached = true;
       clearInterval(state.timerHandle);
-      finishAssessment(true);
+      prepareQuestionNavigation();
+      renderNasaTlxAssessment(true);
     }
   };
   render();
@@ -2571,7 +2898,7 @@ function setSaveStatus(message, tone = '') {
   }
 }
 function assessmentProgressSnapshot() {
-  const total = questions.reduce((sum, question) => sum + question.subquestions.length, 0);
+  const total = (state.questions && state.questions.length) || 6;
   const answered = new Set(state.answers.map(answer => answer.question_id)).size;
   const skipped = new Set(state.skippedQuestionIds || []).size;
   const completed = Math.min(total, answered + skipped);
@@ -3228,7 +3555,7 @@ function renderAdminWorkflowFlowchart() {
 
 function renderAdminAnalytics(data, cliData) {
   const isCohort = !adminFilterState.selectedParticipant || adminFilterState.selectedParticipant === 'all';
-  
+
   // Extract unified participant roster for dropdown and tables
   let participantList = [];
   if (Array.isArray(adminFilterState.cachedCohortParticipants) && adminFilterState.cachedCohortParticipants.length) {
@@ -3281,8 +3608,8 @@ function renderAdminAnalytics(data, cliData) {
     <!-- Dynamic Cognitive Load View Area -->
     <section class="admin-cli-section" id="adminCliContent">
       ${isCohort
-        ? renderAdminCognitiveCohortView(cliData, participantList)
-        : renderAdminCognitiveIndividualView(cliData, adminFilterState.selectedParticipant)}
+      ? renderAdminCognitiveCohortView(cliData, participantList)
+      : renderAdminCognitiveIndividualView(cliData, adminFilterState.selectedParticipant)}
     </section>
 
     <!-- Platform Tools & Telemetry Panel -->
@@ -4213,7 +4540,7 @@ async function openAdminDataPage(dataset, page = 1, participantId = null) {
       : (adminFilterState.selectedParticipant && adminFilterState.selectedParticipant !== 'all' ? adminFilterState.selectedParticipant : null);
 
     const pagedDataset = ['tracking', 'measurement-records', 'rag-prompt-evaluations', 'rag-pipeline', 'rag-documents', 'multimodal-second', 'question-features', 'facial-expression', 'eye-tracking', 'keyboard', 'mouse', 'session-cli-change'].includes(dataset);
-    
+
     const params = new URLSearchParams();
     if (pagedDataset) {
       params.set('page', page);
@@ -4271,7 +4598,7 @@ async function openAdminDataPage(dataset, page = 1, participantId = null) {
     </article>`;
 
     document.getElementById('backToAdminDashboard').onclick = () => renderRoleDashboard('admin');
-    
+
     const selector = document.getElementById('tableParticipantSelector');
     if (selector) {
       selector.value = activePid || 'all';

@@ -1348,7 +1348,7 @@ class BaselineNasaTlxSubmission(BaseModel):
 
 class QuestionWorkloadRating(BaseModel):
     question_id: str = Field(min_length=1, max_length=100)
-    question_number: int = Field(ge=1, le=3)
+    question_number: int = Field(ge=1, le=10)
     rating: int = Field(ge=1, le=10)
 
 
@@ -1360,7 +1360,7 @@ class SessionCompletion(FlexibleModel):
     ended_early: bool
     overall_paas_rating: int | None = Field(default=None, ge=1, le=10)
     nasa_tlx: NasaTlxRatings | None = None
-    question_ratings: list[QuestionWorkloadRating] = Field(default_factory=list, max_length=3)
+    question_ratings: list[QuestionWorkloadRating] = Field(default_factory=list, max_length=10)
     answers: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
     interaction_summary: dict[str, Any] = Field(default_factory=dict, max_length=100)
 
