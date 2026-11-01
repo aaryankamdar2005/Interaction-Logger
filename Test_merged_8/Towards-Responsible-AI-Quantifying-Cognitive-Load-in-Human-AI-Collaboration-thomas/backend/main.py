@@ -1247,11 +1247,47 @@ class FlexibleModel(BaseModel):
 
 class Participant(FlexibleModel):
     participant_id: str = ""
+    username: str = ""
     full_name: str = Field(min_length=1, max_length=200)
     age_group: str
     domain: str
     ai_familiarity: str
     test_mode: bool = False
+
+
+class UserRegisterRequest(FlexibleModel):
+    username: str = Field(min_length=3, max_length=50)
+    full_name: str = Field(min_length=1, max_length=200)
+    password: str = Field(min_length=3, max_length=100)
+    email: str = ""
+    age_group: str = ""
+    domain: str = ""
+    ai_familiarity: str = ""
+
+
+class UserLoginRequest(FlexibleModel):
+    username: str
+    password: str
+
+
+class AdminTaskCreate(FlexibleModel):
+    id: str = ""
+    title: str = Field(min_length=1, max_length=250)
+    domain: str = "Artificial Intelligence"
+    target_age: str = "All Ages"
+    difficulty: str = "Medium"
+    category: str = "General"
+    expected_time: str = "3–5 minutes"
+    scenario: str = ""
+    instructions: Any = []
+
+
+class ChatFeedbackRequest(FlexibleModel):
+    participant_id: str = ""
+    question_id: str = ""
+    prompt_id: str = ""
+    feedback: str = "thumbs_up"
+    comments: str = ""
 
 
 class QuestionStart(FlexibleModel):
@@ -1352,12 +1388,18 @@ class QuestionWorkloadRating(BaseModel):
     rating: int = Field(ge=1, le=10)
 
 
+class SessionResumeRequest(FlexibleModel):
+    participant_id: str = ""
+    username: str = ""
+
+
 class SessionCompletion(FlexibleModel):
-    participant: Participant
+    participant: Participant | None = None
+    participant_id: str = ""
     session_id: str = ""
-    session_started_at: str
-    session_ended_at: str
-    ended_early: bool
+    session_started_at: str = ""
+    session_ended_at: str = ""
+    ended_early: bool = False
     overall_paas_rating: int | None = Field(default=None, ge=1, le=10)
     nasa_tlx: NasaTlxRatings | None = None
     question_ratings: list[QuestionWorkloadRating] = Field(default_factory=list, max_length=10)
@@ -2058,6 +2100,16 @@ def mouse_tracker_javascript() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "mouse_tracker.js", media_type="application/javascript", headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
+@app.get("/tasks.js", include_in_schema=False)
+def tasks_javascript() -> FileResponse:
+    return FileResponse(FRONTEND_DIR / "tasks.js", media_type="application/javascript", headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
+@app.get("/research_metrics_viewer.js", include_in_schema=False)
+def research_metrics_viewer_javascript() -> FileResponse:
+    return FileResponse(FRONTEND_DIR / "research_metrics_viewer.js", media_type="application/javascript", headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+
+
 @app.get("/assets/{asset_path:path}", include_in_schema=False)
 def frontend_assets(asset_path: str) -> FileResponse:
     target_file = FRONTEND_DIR / "assets" / asset_path
@@ -2105,6 +2157,7 @@ def start_session(participant: Participant) -> dict[str, Any]:
         [
             "participant_id",
             "session_id",
+            "username",
             "full_name",
             "age_group",
             "domain",
@@ -2149,6 +2202,51 @@ def start_session(participant: Participant) -> dict[str, Any]:
     return {
         "success": True,
         "participant_id": participant.participant_id,
+        "session_id": session_id,
+        "participant_session_token": token,
+        "expires_at": expires_at.isoformat(),
+    }
+
+
+@app.post("/api/sessions/resume")
+def resume_session(payload: SessionResumeRequest) -> dict[str, Any]:
+    participant_id = payload.participant_id.strip()
+    username = payload.username.strip().lower()
+
+    if not participant_id and username:
+        for p in reversed(storage.list_records("participants", 50000)):
+            if str(p.get("username", "")).strip().lower() == username:
+                participant_id = str(p.get("participant_id", "")).strip()
+                break
+
+    if not participant_id or not storage.participant_exists(participant_id):
+        raise HTTPException(status_code=404, detail="Participant record not found")
+
+    completed = any(
+        row.get("participant_id") == participant_id and row.get("event") == "completed"
+        for row in storage.list_records("sessions", 50000)
+    )
+    if completed:
+        raise HTTPException(status_code=409, detail="This session has already been completed")
+
+    session_id = next(
+        (str(row.get("session_id")) for row in storage.list_records("sessions", 50000)
+         if str(row.get("participant_id")) == participant_id and row.get("event") == "started" and row.get("session_id")),
+        str(uuid.uuid4()),
+    )
+
+    with SESSION_LOCK:
+        SESSION_STATE[participant_id] = {
+            "started_at": utc_now(),
+            "session_id": session_id,
+            "status": "active",
+        }
+
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_TTL_MINUTES * 8)
+    token = create_participant_token(participant_id, expires_at)
+    return {
+        "success": True,
+        "participant_id": participant_id,
         "session_id": session_id,
         "participant_session_token": token,
         "expires_at": expires_at.isoformat(),
@@ -4309,7 +4407,8 @@ def complete_session(
     payload: SessionCompletion,
     authenticated_id: str = Depends(authenticated_participant),
 ) -> dict[str, Any]:
-    if payload.participant.participant_id != authenticated_id:
+    p_id = (payload.participant.participant_id if payload.participant else payload.participant_id) or authenticated_id
+    if p_id != authenticated_id:
         raise HTTPException(status_code=403, detail="Participant token does not match the completed session")
     if not payload.ended_early:
         if payload.nasa_tlx is None:
@@ -4370,15 +4469,18 @@ def complete_session(
                 }
             session["status"] = "active"
         session["status"] = "completing"
+    now_iso = utc_now()
+    session_started = payload.session_started_at or now_iso
+    session_ended = payload.session_ended_at or now_iso
     try:
         duration_seconds = max(
             0,
             int((
-                datetime.fromisoformat(payload.session_ended_at.replace("Z", "+00:00"))
-                - datetime.fromisoformat(payload.session_started_at.replace("Z", "+00:00"))
+                datetime.fromisoformat(session_ended.replace("Z", "+00:00"))
+                - datetime.fromisoformat(session_started.replace("Z", "+00:00"))
             ).total_seconds()),
         )
-    except ValueError:
+    except Exception:
         duration_seconds = 0
     persist_question_tracking_summaries(authenticated_id)
     storage.append(
@@ -4399,7 +4501,7 @@ def complete_session(
             "received_at",
             ],
             {
-                "participant_id": payload.participant.participant_id,
+                "participant_id": p_id,
                 "session_id": session_id,
                 "event": "completed",
                 "session_started_at": payload.session_started_at,
@@ -4510,9 +4612,244 @@ def complete_session(
     eye_tracking_analyzer.forget_participant(authenticated_id)
     return {
         "success": True,
-        "participant_id": payload.participant.participant_id,
+        "participant_id": p_id,
         "session_id": session_id,
         "cli_summary": cli_summary,
         "answers_saved": len(payload.answers),
         "already_completed": False,
     }
+
+
+# ============================================================================
+# USER PROFILE & AUTHENTICATION (REGISTRATION & LOGIN)
+# ============================================================================
+
+def hash_user_password(password: str) -> str:
+    return hashlib.sha256(password.strip().encode("utf-8")).hexdigest()
+
+
+@app.post("/api/users/register")
+def register_user(payload: UserRegisterRequest) -> dict[str, Any]:
+    username = payload.username.strip().lower()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required")
+    if len(username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+    
+    # Check if user already exists
+    existing_users = storage.list_records("users", 10000)
+    for u in existing_users:
+        if str(u.get("username", "")).strip().lower() == username:
+            raise HTTPException(status_code=400, detail="A user profile with this username already exists.")
+    
+    password_hash = hash_user_password(payload.password)
+    user_record = {
+        "username": username,
+        "full_name": payload.full_name.strip(),
+        "email": payload.email.strip(),
+        "password_hash": password_hash,
+        "age_group": payload.age_group,
+        "domain": payload.domain,
+        "ai_familiarity": payload.ai_familiarity,
+        "created_at": utc_now(),
+    }
+    storage.append(
+        "users.csv",
+        ["username", "full_name", "email", "password_hash", "age_group", "domain", "ai_familiarity", "created_at"],
+        user_record,
+    )
+    token = str(uuid.uuid4())
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_TTL_MINUTES * 8)
+    with AUTH_LOCK:
+        AUTH_TOKENS[token] = ("user:" + username, expires_at)
+        
+    return {
+        "success": True,
+        "message": f"User profile '{payload.full_name}' registered successfully!",
+        "user": {
+            "username": username,
+            "full_name": payload.full_name.strip(),
+            "email": payload.email.strip(),
+            "age_group": payload.age_group,
+            "domain": payload.domain,
+            "ai_familiarity": payload.ai_familiarity,
+        },
+        "token": token,
+    }
+
+
+@app.post("/api/users/login")
+def login_user(payload: UserLoginRequest) -> dict[str, Any]:
+    username = payload.username.strip().lower()
+    existing_users = storage.list_records("users", 10000)
+    user = None
+    for u in existing_users:
+        if str(u.get("username", "")).strip().lower() == username:
+            user = u
+            break
+    if not user:
+        raise HTTPException(status_code=401, detail="User profile not found. Please register or check your username.")
+    
+    supplied_hash = hash_user_password(payload.password)
+    stored_hash = str(user.get("password_hash", ""))
+    if supplied_hash != stored_hash and payload.password != stored_hash:
+        raise HTTPException(status_code=401, detail="Incorrect password. Please try again.")
+        
+    token = str(uuid.uuid4())
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_TTL_MINUTES * 8)
+    with AUTH_LOCK:
+        AUTH_TOKENS[token] = ("user:" + username, expires_at)
+        
+    return {
+        "success": True,
+        "message": f"Welcome back, {user.get('full_name')}!",
+        "user": {
+            "username": username,
+            "full_name": user.get("full_name", ""),
+            "email": user.get("email", ""),
+            "age_group": user.get("age_group", ""),
+            "domain": user.get("domain", ""),
+            "ai_familiarity": user.get("ai_familiarity", ""),
+        },
+        "token": token,
+    }
+
+
+@app.get("/api/users/list")
+def list_registered_users() -> dict[str, Any]:
+    existing_users = storage.list_records("users", 1000)
+    users = [
+        {
+            "username": u.get("username"),
+            "full_name": u.get("full_name"),
+            "email": u.get("email"),
+            "age_group": u.get("age_group"),
+            "domain": u.get("domain"),
+            "ai_familiarity": u.get("ai_familiarity"),
+            "created_at": u.get("created_at"),
+        }
+        for u in existing_users
+        if u.get("username")
+    ]
+    return {"success": True, "users": users}
+
+
+# ============================================================================
+# ADMIN TASK MANAGEMENT (CREATION WITH USER CATEGORY: AGE, DOMAIN, DIFFICULTY)
+# ============================================================================
+
+@app.get("/api/admin/tasks")
+@app.get("/api/tasks")
+def get_all_tasks() -> dict[str, Any]:
+    custom_records = storage.list_records("admin_tasks", 1000)
+    tasks = []
+    for ct in custom_records:
+        instructions = ct.get("instructions_json") or ct.get("instructions")
+        if isinstance(instructions, str):
+            try:
+                instructions = json.loads(instructions)
+            except Exception:
+                instructions = [line.strip() for line in instructions.split("\n") if line.strip()]
+        tasks.append({
+            "id": ct.get("task_id") or f"TASK-ADM-{ct.get('id')}",
+            "title": ct.get("title", "Custom Task"),
+            "domain": ct.get("domain", "Artificial Intelligence"),
+            "target_age": ct.get("target_age", "All Ages"),
+            "difficulty": ct.get("difficulty", "Medium"),
+            "category": ct.get("category", "Custom Collaboration"),
+            "expectedTime": ct.get("expected_time", "3–5 minutes"),
+            "scenario": ct.get("scenario", ""),
+            "instructions": instructions if isinstance(instructions, list) else [str(instructions)],
+            "is_custom": True,
+            "created_at": ct.get("created_at", "")
+        })
+    return {"success": True, "custom_tasks": tasks}
+
+
+@app.post("/api/admin/tasks")
+def create_admin_task(
+    payload: AdminTaskCreate,
+    role: str = Depends(authenticated_role),
+) -> dict[str, Any]:
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Administrator role required to enter tasks based on domain and age group")
+    task_id = payload.id.strip() if payload.id else f"TASK-ADM-{int(time.time()) % 100000:05d}"
+    instructions_json = json.dumps(payload.instructions) if isinstance(payload.instructions, list) else json.dumps([str(payload.instructions)])
+    record = {
+        "task_id": task_id,
+        "title": payload.title.strip(),
+        "domain": payload.domain,
+        "target_age": payload.target_age,
+        "difficulty": payload.difficulty,
+        "category": payload.category or "Custom Collaboration",
+        "expected_time": payload.expected_time or "3–5 minutes",
+        "scenario": payload.scenario.strip(),
+        "instructions_json": instructions_json,
+        "created_at": utc_now(),
+    }
+    storage.append(
+        "admin_tasks.csv",
+        ["task_id", "title", "domain", "target_age", "difficulty", "category", "expected_time", "scenario", "instructions_json", "created_at"],
+        record
+    )
+    return {
+        "success": True,
+        "message": f"Task '{payload.title}' created successfully!",
+        "task": {
+            "id": task_id,
+            "title": payload.title.strip(),
+            "domain": payload.domain,
+            "target_age": payload.target_age,
+            "difficulty": payload.difficulty,
+            "category": payload.category or "Custom Collaboration",
+            "expectedTime": payload.expected_time or "3–5 minutes",
+            "scenario": payload.scenario.strip(),
+            "instructions": payload.instructions if isinstance(payload.instructions, list) else [str(payload.instructions)],
+            "is_custom": True,
+            "created_at": record["created_at"],
+        }
+    }
+
+
+@app.delete("/api/admin/tasks/{task_id}")
+def delete_admin_task(
+    task_id: str,
+    role: str = Depends(authenticated_role),
+) -> dict[str, Any]:
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Administrator role required to delete tasks")
+    deleted_count = storage.delete_where("admin_tasks", {"task_id": task_id})
+    if deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Task not found or already deleted")
+    return {"success": True, "message": f"Task '{task_id}' deleted successfully"}
+
+
+# ============================================================================
+# CHAT FEEDBACK (THUMBS UP / THUMBS DOWN)
+# ============================================================================
+
+@app.post("/api/llm/chat/feedback")
+def submit_chat_feedback(payload: ChatFeedbackRequest) -> dict[str, Any]:
+    record = {
+        "participant_id": payload.participant_id,
+        "question_id": payload.question_id,
+        "prompt_id": payload.prompt_id,
+        "feedback": payload.feedback,
+        "comments": payload.comments,
+        "created_at": utc_now(),
+    }
+    storage.append(
+        "chat_feedback.csv",
+        ["participant_id", "question_id", "prompt_id", "feedback", "comments", "created_at"],
+        record
+    )
+    if payload.prompt_id:
+        try:
+            storage.update_where(
+                "chat_logs",
+                {"feedback": payload.feedback},
+                {"prompt_id": payload.prompt_id, "role": "assistant"}
+            )
+        except Exception:
+            pass
+    return {"success": True, "message": "Feedback recorded successfully", "feedback": payload.feedback}

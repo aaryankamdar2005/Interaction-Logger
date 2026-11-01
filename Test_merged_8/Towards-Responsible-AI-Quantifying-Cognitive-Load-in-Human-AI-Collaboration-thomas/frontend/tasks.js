@@ -306,16 +306,30 @@ export const PREDEFINED_TASKS = [
   }
 ];
 
+export let customAdminTasks = [];
+
+export function setCustomTasks(tasks = []) {
+  customAdminTasks = Array.isArray(tasks) ? tasks : [];
+}
+
+export function getAllTasks() {
+  return [...customAdminTasks, ...PREDEFINED_TASKS];
+}
+
 /**
  * Dynamic Task Selector
- * Selects exactly 6 tasks tailored to the participant's Domain and AI Familiarity level.
+ * Selects exactly 6 tasks tailored to the participant's Domain, Age Group, and AI Familiarity level.
  *
- * @param {Object} participant - Participant profile { domain, ai_familiarity }
+ * @param {Object} participant - Participant profile { domain, age_group, ai_familiarity }
+ * @param {Array} [externalCustomTasks] - Optional custom tasks from admin
  * @returns {Array} Array of 6 matched tasks ordered with a progressive cognitive curve.
  */
-export function selectSessionTasks(participant = {}) {
+export function selectSessionTasks(participant = {}, externalCustomTasks = null) {
+  const customList = Array.isArray(externalCustomTasks) ? externalCustomTasks : customAdminTasks;
+  const combinedTasks = [...customList, ...PREDEFINED_TASKS];
   const rawDomain = String(participant.domain || '').trim().toLowerCase();
   const rawLevel = String(participant.ai_familiarity || '').trim().toLowerCase();
+  const rawAge = String(participant.age_group || '').trim();
 
   // Normalize Domain
   let targetDomain = 'Cross-Disciplinary';
@@ -347,15 +361,22 @@ export function selectSessionTasks(participant = {}) {
     ? { Easy: 1, Medium: 2, Hard: 3 }
     : { Easy: 1, Medium: 3, Hard: 2 };
 
+  // Helper to test if task matches participant age category
+  const matchesAge = t => {
+    if (!t.target_age || t.target_age === 'All Ages' || t.target_age === 'All' || !rawAge) return true;
+    return t.target_age === rawAge;
+  };
+
   // Separate tasks into candidate buckets
-  const domainTasks = PREDEFINED_TASKS.filter(t => t.domain === targetDomain);
-  const otherTasks = PREDEFINED_TASKS.filter(t => t.domain !== targetDomain);
+  const domainTasks = combinedTasks.filter(t => (t.domain === targetDomain || t.domain === 'Cross-Disciplinary') && matchesAge(t));
+  const otherTasks = combinedTasks.filter(t => t.domain !== targetDomain && matchesAge(t));
+  const fallbackTasks = combinedTasks;
 
   // Group by difficulty
   const candidatesByDiff = {
-    Easy: [...domainTasks.filter(t => t.difficulty === 'Easy'), ...otherTasks.filter(t => t.difficulty === 'Easy')],
-    Medium: [...domainTasks.filter(t => t.difficulty === 'Medium'), ...otherTasks.filter(t => t.difficulty === 'Medium')],
-    Hard: [...domainTasks.filter(t => t.difficulty === 'Hard'), ...otherTasks.filter(t => t.difficulty === 'Hard')],
+    Easy: [...domainTasks.filter(t => t.difficulty === 'Easy'), ...otherTasks.filter(t => t.difficulty === 'Easy'), ...fallbackTasks.filter(t => t.difficulty === 'Easy')],
+    Medium: [...domainTasks.filter(t => t.difficulty === 'Medium'), ...otherTasks.filter(t => t.difficulty === 'Medium'), ...fallbackTasks.filter(t => t.difficulty === 'Medium')],
+    Hard: [...domainTasks.filter(t => t.difficulty === 'Hard'), ...otherTasks.filter(t => t.difficulty === 'Hard'), ...fallbackTasks.filter(t => t.difficulty === 'Hard')],
   };
 
   const selected = [];
@@ -376,7 +397,7 @@ export function selectSessionTasks(participant = {}) {
 
   // Fallback to guarantee exactly 6 unique tasks
   if (selected.length < 6) {
-    for (const task of PREDEFINED_TASKS) {
+    for (const task of combinedTasks) {
       if (!selectedIds.has(task.id) && selected.length < 6) {
         selected.push(task);
         selectedIds.add(task.id);
@@ -391,19 +412,25 @@ export function selectSessionTasks(participant = {}) {
   // Format tasks into assessment questions
   return selected.slice(0, 6).map((task, idx) => {
     const taskNum = idx + 1;
+    const instructions = Array.isArray(task.instructions)
+      ? task.instructions
+      : typeof task.instructions === 'string'
+      ? task.instructions.split('\n').filter(Boolean)
+      : [];
     return {
       id: task.id,
       topicId: `TASK-${taskNum}`,
       taskNumber: taskNum,
       title: task.title,
       domain: task.domain,
+      target_age: task.target_age || 'All Ages',
       difficulty: task.difficulty,
       category: task.category,
       expectedTime: task.expectedTime,
       questionPart: `Task ${taskNum} of 6`,
       scenario: task.scenario,
-      instructions: task.instructions,
-      text: `${task.scenario}\n\nTask Focus:\n${task.instructions.map((ins, i) => `${i + 1}. ${ins}`).join('\n')}`,
+      instructions: instructions,
+      text: `${task.scenario}\n\nTask Focus:\n${instructions.map((ins, i) => `${i + 1}. ${ins}`).join('\n')}`,
       topic: `${task.category}: ${task.title}`
     };
   });

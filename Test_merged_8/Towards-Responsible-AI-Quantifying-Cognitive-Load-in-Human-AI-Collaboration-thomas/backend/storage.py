@@ -118,6 +118,23 @@ class PostgresStorage:
                 )
                 return cursor.rowcount
 
+    def delete_where(self, table: str, conditions: dict[str, Any]) -> int:
+        if not conditions:
+            return 0
+        table_name = table.removesuffix(".csv")
+        quoted_table = self._identifier(table_name)
+        where_fields = list(conditions)
+        quoted_where = [self._identifier(field) for field in where_fields]
+        with self._schema_lock, self._connect() as connection:
+            with connection.cursor() as cursor:
+                self._ensure_table(cursor, table_name, where_fields)
+                predicates = " AND ".join(f"{field} = %s" for field in quoted_where)
+                cursor.execute(
+                    f"DELETE FROM {quoted_table} WHERE {predicates}",
+                    [self._serialize(conditions[field]) for field in where_fields],
+                )
+                return cursor.rowcount
+
     def table_columns(self, table: str) -> list[str]:
         table_name = table.removesuffix(".csv")
         with self._psycopg.connect(self.database_url) as connection:
@@ -484,6 +501,19 @@ class SqliteStorage:
             result = connection.execute(
                 f"UPDATE {self._identifier(table_name)} SET {assignments} WHERE {predicates}",
                 [self._serialize(values[field]) for field in values] + [self._serialize(conditions[field]) for field in conditions],
+            )
+            return result.rowcount
+
+    def delete_where(self, table: str, conditions: dict[str, Any]) -> int:
+        if not conditions:
+            return 0
+        table_name = table.removesuffix(".csv")
+        with self._schema_lock, self._connect() as connection:
+            self._ensure_table(connection, table_name, list(conditions))
+            predicates = " AND ".join(f"{self._identifier(field)} = ?" for field in conditions)
+            result = connection.execute(
+                f"DELETE FROM {self._identifier(table_name)} WHERE {predicates}",
+                [self._serialize(conditions[field]) for field in conditions],
             )
             return result.rowcount
 

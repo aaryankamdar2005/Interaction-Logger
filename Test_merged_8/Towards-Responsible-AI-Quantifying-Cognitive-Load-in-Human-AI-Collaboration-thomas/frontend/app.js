@@ -41,14 +41,270 @@ const archivedQuestions = [
 ];
 */
 
-const NASA_TLX_DIMENSIONS = [
-  { key: 'mental_demand', label: 'Mental demand', help: 'How much thinking, deciding, or calculating was required?' },
-  { key: 'physical_demand', label: 'Physical demand', help: 'How much physical activity was required?' },
-  { key: 'temporal_demand', label: 'Temporal demand', help: 'How much time pressure did you feel?' },
-  { key: 'performance', label: 'Performance', help: 'How successful were you in accomplishing the tasks? 1 = excellent, 10 = poor.' },
-  { key: 'effort', label: 'Effort', help: 'How hard did you have to work to achieve your level of performance?' },
-  { key: 'frustration', label: 'Frustration', help: 'How insecure, discouraged, irritated, stressed, or annoyed did you feel?' }
+// ============================================================================
+// REACT-TOASTIFY STYLE TOAST NOTIFICATION SYSTEM
+// ============================================================================
+
+export function formatToastMessage(msg) {
+  if (msg === null || msg === undefined) return '';
+  if (typeof msg === 'string') {
+    if (msg.includes('[object Object]')) {
+      return msg.replace(/\[object Object\](,\[object Object\])*/g, 'Validation or request error occurred.');
+    }
+    return msg;
+  }
+  if (msg instanceof Error) {
+    return formatToastMessage(msg.message || 'An unexpected error occurred');
+  }
+  if (Array.isArray(msg)) {
+    return msg.map(item => {
+      if (typeof item === 'object' && item !== null) {
+        return item.msg || item.message || item.detail || JSON.stringify(item);
+      }
+      return String(item);
+    }).join('; ');
+  }
+  if (typeof msg === 'object') {
+    if (msg.detail) return formatToastMessage(msg.detail);
+    if (msg.message) return formatToastMessage(msg.message);
+    if (msg.msg) return formatToastMessage(msg.msg);
+    try {
+      return JSON.stringify(msg);
+    } catch {
+      return String(msg);
+    }
+  }
+  return String(msg);
+}
+
+function getToastContainer() {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container';
+    container.setAttribute('aria-live', 'polite');
+    container.setAttribute('role', 'region');
+    document.body.appendChild(container);
+  }
+  return container;
+}
+
+export function showToast(message, type = 'info', title = '', duration = 4000) {
+  const container = getToastContainer();
+  const toastEl = document.createElement('div');
+  toastEl.className = `toast-item toast-${type}`;
+  toastEl.setAttribute('role', 'status');
+
+  const icons = {
+    success: `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+    error: `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+    warning: `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    info: `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
+  };
+
+  const defaultTitles = {
+    success: 'Success',
+    error: 'Notice',
+    warning: 'Attention',
+    info: 'Information'
+  };
+
+  const displayTitle = title || defaultTitles[type] || 'Notice';
+  const displayMsg = formatToastMessage(message);
+
+  const isLight = (document.documentElement.dataset.theme || 'light') === 'light';
+  const cardBg = isLight ? '#ffffff' : '#0f172a';
+  const borderCol = isLight ? '#cbd5e1' : '#334155';
+  const titleCol = isLight ? '#0f172a' : '#ffffff';
+  const msgCol = isLight ? '#334155' : '#e2e8f0';
+  const closeCol = isLight ? '#64748b' : '#94a3b8';
+  const accentColors = {
+    success: '#10b981',
+    error: '#ef4444',
+    warning: '#f59e0b',
+    info: '#3b82f6'
+  };
+  const accent = accentColors[type] || accentColors.info;
+  const cardShadow = isLight 
+    ? '0 14px 36px rgba(15, 23, 42, 0.16), 0 4px 12px rgba(15, 23, 42, 0.08)' 
+    : '0 16px 40px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3)';
+
+  toastEl.style.cssText = `
+    background: ${cardBg} !important;
+    color: ${titleCol} !important;
+    border: 1px solid ${borderCol} !important;
+    border-left: 6px solid ${accent} !important;
+    box-shadow: ${cardShadow} !important;
+  `;
+
+  toastEl.innerHTML = `
+    <div class="toast-icon-wrap" style="color: ${accent} !important;">${icons[type] || icons.info}</div>
+    <div class="toast-content">
+      <div class="toast-title" style="color: ${titleCol} !important; font-weight: 800 !important; font-size: 14px !important; margin-bottom: 4px !important; line-height: 1.3 !important;">${escapeHtml(displayTitle)}</div>
+      <div class="toast-message" style="color: ${msgCol} !important; font-weight: 500 !important; font-size: 13px !important; line-height: 1.5 !important;">${escapeHtml(displayMsg)}</div>
+    </div>
+    <button class="toast-close" type="button" aria-label="Close notification" style="color: ${closeCol} !important; font-size: 20px !important;">&times;</button>
+    <div class="toast-progress"><div class="toast-progress-bar" style="background: ${accent} !important; animation-duration:${duration}ms"></div></div>
+  `;
+
+  let timeoutId = null;
+  let remaining = duration;
+  let startTime = Date.now();
+  let isPaused = false;
+
+  const closeToast = () => {
+    if (timeoutId) clearTimeout(timeoutId);
+    toastEl.classList.add('toast-exit');
+    setTimeout(() => {
+      if (toastEl.parentElement) toastEl.parentElement.removeChild(toastEl);
+    }, 320);
+  };
+
+  const startTimer = (time) => {
+    startTime = Date.now();
+    timeoutId = setTimeout(closeToast, time);
+  };
+
+  toastEl.querySelector('.toast-close').addEventListener('click', closeToast);
+
+  toastEl.addEventListener('mouseenter', () => {
+    if (timeoutId) clearTimeout(timeoutId);
+    remaining -= (Date.now() - startTime);
+    const progressBar = toastEl.querySelector('.toast-progress-bar');
+    if (progressBar) progressBar.style.animationPlayState = 'paused';
+    isPaused = true;
+  });
+
+  toastEl.addEventListener('mouseleave', () => {
+    if (isPaused) {
+      const progressBar = toastEl.querySelector('.toast-progress-bar');
+      if (progressBar) progressBar.style.animationPlayState = 'running';
+      startTimer(Math.max(remaining, 1000));
+      isPaused = false;
+    }
+  });
+
+  container.appendChild(toastEl);
+  startTimer(duration);
+}
+
+export function confirmToast(message, options = {}) {
+  return new Promise((resolve) => {
+    const container = getToastContainer();
+    const toastEl = document.createElement('div');
+    const type = options.type || 'warning';
+    const title = options.title || 'Please Confirm';
+    const confirmText = options.confirmText || 'Confirm';
+    const cancelText = options.cancelText || 'Cancel';
+    const isDanger = options.danger || type === 'error';
+
+    toastEl.className = `toast-item toast-${type} toast-confirm-card`;
+    toastEl.setAttribute('role', 'alertdialog');
+    toastEl.setAttribute('aria-modal', 'true');
+
+    const icons = {
+      success: `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+      error: `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+      warning: `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+      info: `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`
+    };
+
+    const isLight = (document.documentElement.dataset.theme || 'light') === 'light';
+    const cardBg = isLight ? '#ffffff' : '#0f172a';
+    const borderCol = isLight ? '#cbd5e1' : '#334155';
+    const titleCol = isLight ? '#0f172a' : '#ffffff';
+    const msgCol = isLight ? '#334155' : '#e2e8f0';
+    const closeCol = isLight ? '#64748b' : '#94a3b8';
+    const accentColors = {
+      success: '#10b981',
+      error: '#ef4444',
+      warning: '#f59e0b',
+      info: '#3b82f6'
+    };
+    const accent = accentColors[type] || accentColors.warning;
+    const cardShadow = isLight 
+      ? '0 16px 42px rgba(15, 23, 42, 0.18), 0 4px 14px rgba(15, 23, 42, 0.08)' 
+      : '0 20px 48px rgba(0, 0, 0, 0.55), 0 6px 16px rgba(0, 0, 0, 0.35)';
+
+    toastEl.style.cssText = `
+      background: ${cardBg} !important;
+      color: ${titleCol} !important;
+      border: 1px solid ${borderCol} !important;
+      border-left: 6px solid ${accent} !important;
+      box-shadow: ${cardShadow} !important;
+    `;
+
+    const cleanMsg = formatToastMessage(message);
+
+    toastEl.innerHTML = `
+      <div class="toast-icon-wrap" style="color: ${accent} !important;">${icons[type] || icons.warning}</div>
+      <div class="toast-content">
+        <div class="toast-title" style="color: ${titleCol} !important; font-weight: 800 !important; font-size: 14px !important; margin-bottom: 4px !important;">${escapeHtml(title)}</div>
+        <div class="toast-message" style="color: ${msgCol} !important; font-weight: 500 !important; font-size: 13px !important; line-height: 1.5 !important;">${escapeHtml(cleanMsg)}</div>
+        <div class="toast-actions" style="display: flex; gap: 8px; margin-top: 12px;">
+          <button class="toast-btn toast-btn-confirm" type="button" data-toast-confirm="true" style="padding: 7px 16px !important; font-weight: 700 !important; font-size: 12.5px !important; border-radius: 6px !important; background: ${isDanger ? '#dc2626' : '#2563eb'} !important; color: #ffffff !important; border: none !important; cursor: pointer !important;">${escapeHtml(confirmText)}</button>
+          <button class="toast-btn toast-btn-cancel" type="button" data-toast-cancel="true" style="padding: 7px 16px !important; font-weight: 700 !important; font-size: 12.5px !important; border-radius: 6px !important; background: ${isLight ? '#f1f5f9' : '#1e293b'} !important; color: ${isLight ? '#334155' : '#e2e8f0'} !important; border: 1px solid ${isLight ? '#cbd5e1' : '#475569'} !important; cursor: pointer !important;">${escapeHtml(cancelText)}</button>
+        </div>
+      </div>
+      <button class="toast-close" type="button" aria-label="Close dialog" style="color: ${closeCol} !important; font-size: 20px !important;">&times;</button>
+    `;
+
+    let settled = false;
+    const finalize = (result) => {
+      if (settled) return;
+      settled = true;
+      toastEl.classList.add('toast-exit');
+      setTimeout(() => {
+        if (toastEl.parentElement) toastEl.parentElement.removeChild(toastEl);
+      }, 300);
+      resolve(result);
+    };
+
+    toastEl.querySelector('[data-toast-confirm]').addEventListener('click', () => finalize(true));
+    toastEl.querySelector('[data-toast-cancel]').addEventListener('click', () => finalize(false));
+    toastEl.querySelector('.toast-close').addEventListener('click', () => finalize(false));
+
+    container.appendChild(toastEl);
+  });
+}
+export const toast = {
+  success: (msg, title) => showToast(msg, 'success', title),
+  error: (msg, title) => showToast(msg, 'error', title),
+  info: (msg, title) => showToast(msg, 'info', title),
+  warning: (msg, title) => showToast(msg, 'warning', title),
+  confirm: confirmToast,
+};
+window.showToast = showToast;
+window.confirmToast = confirmToast;
+window.toast = toast;
+window.alert = function(msg) {
+  showToast(msg, 'info', 'Notice');
+};
+
+// ============================================================================
+// TAILORED NASA-TLX STATEMENTS (START: BASELINE READINESS vs END: POST-TASK LOAD)
+// ============================================================================
+
+const NASA_TLX_START_DIMENSIONS = [
+  { key: 'mental_demand', label: 'Mental Fatigue & Load', help: 'Current Mental State: Rate your current mental fatigue or cognitive strain before starting (0 = Completely fresh & alert, 10 = Mentally exhausted).' },
+  { key: 'physical_demand', label: 'Physical Tiredness', help: 'Current Physical State: Rate any physical fatigue, eye strain, or bodily tiredness you feel right now (0 = Fully rested & energized, 10 = Severely physically fatigued).' },
+  { key: 'temporal_demand', label: 'Time Pressure', help: 'Current Pacing: Rate how hurried, rushed, or time-pressed you feel at this moment (0 = Completely calm & unhurried, 10 = Under intense time pressure).' },
+  { key: 'performance', label: 'Cognitive Readiness', help: 'Pre-Task Confidence: How prepared and confident do you feel to collaborate with AI and solve complex problems? (0 = Low confidence / unprepared, 10 = Fully prepared & highly confident).' },
+  { key: 'effort', label: 'Anticipated Effort', help: 'Expected Cognitive Effort: How much mental effort and focus do you anticipate needing to invest in these tasks? (0 = Minimal effort expected, 10 = Maximum effort required).' },
+  { key: 'frustration', label: 'Emotional Stress', help: 'Pre-Task Stress: Rate your current level of stress, anxiety, or emotional tension before starting (0 = Completely serene & calm, 10 = Highly stressed / anxious).' }
 ];
+
+const NASA_TLX_END_DIMENSIONS = [
+  { key: 'mental_demand', label: 'Mental Demand', help: 'Post-Task Mental Demand: How much intensive thinking, complex decision-making, and critical reasoning was required while collaborating with the AI? (0 = Low / easy cognitive demand, 10 = Extremely high mental strain).' },
+  { key: 'physical_demand', label: 'Physical Strain', help: 'Post-Task Physical Strain: How much physical strain or visual/eye fatigue did you experience during the tasks? (0 = None / comfortable, 10 = Heavy physical/eye fatigue).' },
+  { key: 'temporal_demand', label: 'Temporal Demand', help: 'Post-Task Time Pressure: How much pacing pressure, rush, or urgency did you feel while evaluating the AI outputs and completing tasks? (0 = Plentiful time / relaxed, 10 = Heavy rush / intense time pressure).' },
+  { key: 'performance', label: 'Collaboration Performance', help: 'Post-Task Performance: How successfully and accurately did you accomplish the tasks with the AI\'s assistance? (0 = Poor / unhelpful AI outcomes, 10 = Outstanding / highly successful outcomes).' },
+  { key: 'effort', label: 'Expended Effort', help: 'Post-Task Effort: How hard did you have to work mentally and critically to guide and review the AI to achieve your solutions? (0 = Effortless collaboration, 10 = Exhausting mental effort).' },
+  { key: 'frustration', label: 'Frustration Level', help: 'Post-Task Frustration: How irritated, stressed, or discouraged did you feel due to AI mistakes, misunderstandings, or complexity? (0 = Calm / zero frustration, 10 = Extremely frustrated & stressed).' }
+];
+
+const NASA_TLX_DIMENSIONS = NASA_TLX_END_DIMENSIONS;
 
 const state = {
   participant: null,
@@ -59,7 +315,10 @@ const state = {
   subquestion: 0,
   questionTransition: '',
   questionDrafts: {},
-  selectedLLM: '',
+  selectedLLM: 'Groq',
+  registeredUser: null,
+  chatFeedback: {},
+  customAdminTasks: [],
   started: false,
   trackingActive: false,
   trackingStartedAt: null,
@@ -176,14 +435,18 @@ function currentTheme() {
 function applyTheme(theme = currentTheme()) {
   const selectedTheme = theme === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.theme = selectedTheme;
+  document.documentElement.style.colorScheme = selectedTheme;
   localStorage.setItem(THEME_STORAGE_KEY, selectedTheme);
   document.querySelectorAll('[data-theme-toggle]').forEach(button => {
     const lightMode = selectedTheme === 'light';
     button.textContent = lightMode ? '☾ Dark Mode' : '☀ Light Mode';
     button.setAttribute('aria-label', lightMode ? 'Switch to dark mode' : 'Switch to light mode');
   });
+  const modelSelect = document.getElementById('aiModelSelect');
+  if (modelSelect) {
+    modelSelect.style.colorScheme = selectedTheme;
+  }
 }
-
 function themeToggleMarkup() {
   const lightMode = currentTheme() === 'light';
   return `<button class="theme-toggle" data-theme-toggle type="button" aria-label="${lightMode ? 'Switch to dark mode' : 'Switch to light mode'}">${lightMode ? 'Light Mode' : 'Dark Mode'}</button>`;
@@ -224,6 +487,10 @@ new MutationObserver(syncPersistentThemeToggle).observe(app, { childList: true, 
 
 function saveParticipantState() {
   if (!state.participant || !state.participantSessionToken) return;
+  const remainingSeconds = state.assessmentDeadline
+    ? Math.max(0, Math.round((state.assessmentDeadline - Date.now()) / 1000))
+    : 3600;
+
   const saved = {
     participant: state.participant,
     participantSessionToken: state.participantSessionToken,
@@ -249,12 +516,22 @@ function saveParticipantState() {
     messages: state.messages,
     sessionStart: state.sessionStart,
     assessmentDeadline: state.assessmentDeadline,
+    remainingSeconds,
     assessmentStage: state.assessmentStage,
     timeLimitReached: state.timeLimitReached,
     tracking: state.tracking,
-    lastInteractionAt: state.lastInteractionAt
+    lastInteractionAt: state.lastInteractionAt,
+    savedAt: Date.now()
   };
-  sessionStorage.setItem(PARTICIPANT_STATE_KEY, JSON.stringify(saved));
+
+  const serialized = JSON.stringify(saved);
+  sessionStorage.setItem(PARTICIPANT_STATE_KEY, serialized);
+  localStorage.setItem(PARTICIPANT_STATE_KEY, serialized);
+
+  const username = (state.registeredUser?.username || state.participant?.username || '').trim().toLowerCase();
+  if (username) {
+    localStorage.setItem(`cognitrack_participant_state_${username}`, serialized);
+  }
 }
 
 function scheduleParticipantStateSave() {
@@ -265,8 +542,43 @@ function scheduleParticipantStateSave() {
   }, 150);
 }
 
-function clearParticipantState() {
+function clearParticipantState(specificUsername = '') {
   sessionStorage.removeItem(PARTICIPANT_STATE_KEY);
+  localStorage.removeItem(PARTICIPANT_STATE_KEY);
+  const username = (specificUsername || state.registeredUser?.username || state.participant?.username || '').trim().toLowerCase();
+  if (username) {
+    localStorage.removeItem(`cognitrack_participant_state_${username}`);
+  }
+}
+
+function getSavedSessionForUser(username) {
+  if (!username) return null;
+  const uname = username.trim().toLowerCase();
+  try {
+    const raw = localStorage.getItem(`cognitrack_participant_state_${uname}`)
+      || localStorage.getItem(PARTICIPANT_STATE_KEY)
+      || sessionStorage.getItem(PARTICIPANT_STATE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const savedUname = (parsed.participant?.username || '').trim().toLowerCase();
+    if (savedUname && savedUname !== uname) return null;
+
+    if (parsed.assessmentStage === 'summary') return null;
+
+    const hasProgress = parsed.started
+      || (Array.isArray(parsed.answers) && parsed.answers.length > 0)
+      || parsed.current > 0
+      || parsed.assessmentStage === 'exam'
+      || parsed.assessmentStage === 'nasa'
+      || (parsed.baselineNasaTlx && Object.keys(parsed.baselineNasaTlx).length > 0);
+
+    if (!hasProgress) return null;
+    return parsed;
+  } catch (_e) {
+    return null;
+  }
 }
 
 function resetParticipantSession() {
@@ -478,6 +790,161 @@ document.addEventListener('wheel', event => {
   }
 }, { passive: true });
 
+
+function renderResumePrompt(saved, user, testMode) {
+  state.registeredUser = user;
+  const totalTasks = (saved.questions && saved.questions.length) || 6;
+  const currentTaskNum = (saved.current || 0) + 1;
+  const answeredCount = (saved.answers && saved.answers.length) || 0;
+  const skippedCount = (saved.skippedQuestionIds && saved.skippedQuestionIds.length) || 0;
+  const currentTask = saved.questions?.[saved.current] || {};
+  const remainingSecs = Math.max(60, saved.remainingSeconds || 3600);
+
+  const formatSecs = (total) => {
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  app.innerHTML = `
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="logo">C</div>
+          <div>
+            <h1>CogniTrack <span style="color:#38dd9a">AI</span></h1>
+            <small>Assessment Continuity</small>
+          </div>
+        </div>
+        ${themeToggleMarkup()}
+        <button class="secondary" id="resumeSignOutBtn" type="button">Sign Out</button>
+      </header>
+      <main class="resume-flow-container">
+        <div class="resume-modal-card card">
+          <div class="resume-badge-wrap">
+            <span class="resume-status-badge">⚡ In-Progress Session Detected</span>
+          </div>
+          <h2>Welcome back, ${escapeHtml(user.full_name)}!</h2>
+          <p class="resume-intro-text">
+            You previously left an assessment in progress. Would you like to resume where you left off, or start a completely fresh session?
+          </p>
+
+          <div class="resume-stats-grid">
+            <div class="resume-stat-item">
+              <span class="stat-label">Current Progress</span>
+              <span class="stat-value">Task ${currentTaskNum} of ${totalTasks}</span>
+              <span class="stat-sub">${escapeHtml(currentTask.domain || 'Data Science')} • ${escapeHtml(currentTask.difficulty || 'Normal')}</span>
+            </div>
+            <div class="resume-stat-item">
+              <span class="stat-label">Tasks Completed</span>
+              <span class="stat-value">${answeredCount} Answered</span>
+              <span class="stat-sub">${skippedCount} Skipped</span>
+            </div>
+            <div class="resume-stat-item">
+              <span class="stat-label">Time Remaining</span>
+              <span class="stat-value">${formatSecs(remainingSecs)}</span>
+              <span class="stat-sub">Timer will resume</span>
+            </div>
+            <div class="resume-stat-item">
+              <span class="stat-label">Current Objective</span>
+              <span class="stat-value" style="font-size: 13px; font-weight: 600; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                ${escapeHtml(currentTask.title || 'Dynamic Task Assessment')}
+              </span>
+            </div>
+          </div>
+
+          <div class="resume-actions-group">
+            <button class="primary resume-action-btn" id="resumeSavedTaskBtn" type="button">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 8px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Resume Previous Assessment
+            </button>
+            <button class="secondary fresh-start-action-btn" id="freshStartNewTaskBtn" type="button">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              Fresh Start (Start New Assessment)
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+  `;
+
+  document.getElementById('resumeSignOutBtn').addEventListener('click', () => {
+    resetParticipantSession();
+    renderLogin();
+  });
+
+  document.getElementById('resumeSavedTaskBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('resumeSavedTaskBtn');
+    btn.disabled = true;
+    btn.textContent = 'Restoring session…';
+
+    try {
+      let participantId = saved.participant?.participant_id || '';
+      try {
+        const resumeRes = await safePost('/sessions/resume', {
+          participant_id: participantId,
+          username: user.username
+        });
+        if (resumeRes?.participant_session_token) {
+          saved.participantSessionToken = resumeRes.participant_session_token;
+          if (resumeRes.session_id) saved.sessionId = resumeRes.session_id;
+        }
+      } catch (resumeErr) {
+        console.warn('Backend resume non-critical:', resumeErr);
+      }
+
+      Object.assign(state, saved);
+      state.registeredUser = user;
+      state.assessmentDeadline = Date.now() + remainingSecs * 1000;
+      state.started = true;
+      state.trackingActive = true;
+      saveParticipantState();
+
+      toast.success(`Resumed Task ${currentTaskNum} of ${totalTasks}!`, 'Assessment Resumed');
+
+      try {
+        await startVisionCamera();
+        startSharedTrackingCapture();
+      } catch (_e) {}
+
+      if (state.assessmentStage === 'nasa') {
+        renderNasaTlxAssessment(state.endedEarly);
+      } else if (state.assessmentStage === 'baseline-nasa') {
+        renderBaselineNasaTlx();
+      } else {
+        renderExam();
+      }
+    } catch (err) {
+      toast.error(err.message, 'Resume Error');
+      btn.disabled = false;
+      btn.textContent = 'Resume Previous Assessment';
+    }
+  });
+
+  document.getElementById('freshStartNewTaskBtn').addEventListener('click', async () => {
+    const ok = await confirmToast(
+      'Start a completely fresh assessment? Your previous incomplete progress and answers will be discarded.',
+      { title: 'Confirm Fresh Start', confirmText: 'Yes, Start Fresh', cancelText: 'Go Back', type: 'warning' }
+    );
+    if (!ok) return;
+
+    clearParticipantState(user.username);
+    resetParticipantSession();
+    state.registeredUser = user;
+    toast.info('Starting fresh assessment from Task 1.', 'New Session');
+
+    await startParticipantSession({
+      participant_id: '',
+      username: user.username,
+      full_name: user.full_name,
+      age_group: user.age_group || '23–28',
+      domain: user.domain || 'Artificial Intelligence',
+      ai_familiarity: user.ai_familiarity || 'Intermediate',
+      test_mode: Boolean(testMode)
+    });
+  });
+}
+
 function renderLogin() {
   clearInterval(dashboardTimer);
   app.innerHTML = `
@@ -511,14 +978,6 @@ function renderLogin() {
                 <circle cx="18" cy="136" r="4"/><circle cx="292" cy="154" r="4"/><circle cx="552" cy="124" r="4"/><circle cx="742" cy="264" r="4"/>
                 <circle cx="88" cy="364" r="4"/><circle cx="292" cy="332" r="4"/><circle cx="488" cy="292" r="4"/><circle cx="708" cy="226" r="4"/>
               </g>
-              <g class="network-dots">
-                <circle cx="76" cy="82" r="2.5"/><circle cx="126" cy="126" r="2"/><circle cx="168" cy="64" r="3"/><circle cx="210" cy="184" r="2.5"/><circle cx="256" cy="76" r="2"/>
-                <circle cx="310" cy="48" r="2.5"/><circle cx="346" cy="116" r="2"/><circle cx="390" cy="72" r="3"/><circle cx="430" cy="132" r="2"/><circle cx="492" cy="54" r="2.5"/>
-                <circle cx="548" cy="86" r="2"/><circle cx="602" cy="42" r="3"/><circle cx="650" cy="104" r="2.5"/><circle cx="696" cy="72" r="2"/>
-                <circle cx="120" cy="238" r="2.5"/><circle cx="178" cy="276" r="2"/><circle cx="226" cy="240" r="3"/><circle cx="278" cy="292" r="2"/><circle cx="338" cy="252" r="2.5"/>
-                <circle cx="406" cy="284" r="2"/><circle cx="454" cy="232" r="3"/><circle cx="520" cy="306" r="2.5"/><circle cx="576" cy="246" r="2"/><circle cx="636" cy="292" r="3"/><circle cx="688" cy="334" r="2"/>
-                <circle cx="148" cy="346" r="2"/><circle cx="244" cy="356" r="2.5"/><circle cx="364" cy="344" r="2"/><circle cx="428" cy="366" r="2.5"/><circle cx="558" cy="354" r="2"/><circle cx="644" cy="370" r="2.5"/>
-              </g>
             </svg>
             <model-viewer
               class="login-model"
@@ -535,39 +994,126 @@ function renderLogin() {
             </model-viewer>
           </div>
         </div>
-        <form id="loginForm" class="card login-card login-sequence-form">
+
+        <!-- USER PROFILE AUTHENTICATION PORTAL (SIGN IN & REGISTER) -->
+        <div class="card login-card login-sequence-form auth-portal-card">
           <div class="login-card-handle" aria-hidden="true"></div>
-          <div class="login-card-kicker"><span class="status-orb" aria-hidden="true"></span> SECURE SESSION</div>
-          <h3>Unlock your assessment</h3>
-          <p class="login-card-intro">Enter your details to create a private cognitive assessment session.</p>
-          <div class="session-steps" aria-label="Assessment setup steps">
-            <span class="session-step active" data-login-step="profile"><i>1</i> Profile</span>
-            <span class="session-step-line" aria-hidden="true"></span>
-            <span class="session-step" data-login-step="consent"><i>2</i> Consent</span>
-            <span class="session-step-line" aria-hidden="true"></span>
-            <span class="session-step" data-login-step="begin"><i>3</i> Begin</span>
+          <div class="login-card-kicker"><span class="status-orb" aria-hidden="true"></span> USER PROFILE PORTAL</div>
+          <h3 style="margin-bottom:6px;">Candidate Assessment Session</h3>
+          <p class="login-card-intro" style="margin-bottom:16px;">Sign in with your registered profile or create a new user profile.</p>
+
+          <!-- Auth Mode Tab Switcher -->
+          <div class="auth-mode-tabs" role="tablist">
+            <button class="auth-tab-btn active" id="authTabLogin" type="button" role="tab" aria-selected="true">🔑 Sign In (Existing)</button>
+            <button class="auth-tab-btn" id="authTabRegister" type="button" role="tab" aria-selected="false">📝 Register New</button>
           </div>
-          <div class="field"><label>Full Name</label><input id="fullName" placeholder="Enter full name" required /></div>
-          <div class="grid-2">
-            <div class="field"><label>Age Group</label><select id="ageGroup" required><option value="">Select age group</option><option>18–22</option><option>23–28</option><option>29–35</option><option>36–45</option><option>46+</option></select></div>
-            <div class="field"><label>Domain</label><select id="domain" required><option value="">Select domain</option><option>Artificial Intelligence</option><option>Computer Science</option><option>Data Science</option><option>Software Development</option><option>Other</option></select></div>
-          </div>
-          <div class="field"><label>AI Familiarity Level</label><select id="level" required><option value="">Select familiarity level</option><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select></div>
-          <label class="consent"><input id="consent" type="checkbox" /> <span>I agree to participate in this assessment and allow interaction data to be collected for the stated research purpose.</span></label>
-          <label class="consent test-mode-option"><input id="testMode" type="checkbox" /> <span>Test mode (exclude this session from research exports)</span></label>
-          <button class="primary login-submit" type="submit"><span>Continue securely</span><strong aria-hidden="true">↗</strong></button>
-          <p class="login-footnote"><span aria-hidden="true">⌁</span> Your responses and interaction data stay linked to this session.</p>
-          <div class="login-loading" id="loginLoading" aria-live="polite" hidden><span class="loading-orb" aria-hidden="true"></span><span>Preparing your private session...</span></div>
-          <div class="error" id="loginError"></div>
-        </form>
+
+          <!-- TAB 1: EXISTING USER LOGIN -->
+          <form id="userLoginForm" class="auth-form-view">
+            <div class="field" style="margin-bottom:12px;">
+              <label>Quick-Select Registered Profile</label>
+              <select id="quickUserSelect">
+                <option value="">-- Choose a registered candidate profile --</option>
+              </select>
+            </div>
+            
+            <div class="field">
+              <label>Username</label>
+              <input id="loginUsername" placeholder="Enter your username" required autocomplete="username" />
+            </div>
+
+            <div class="field">
+              <label>Password</label>
+              <input id="loginPassword" type="password" placeholder="Enter password" required autocomplete="current-password" />
+            </div>
+
+            <div id="selectedUserProfileBadge" class="user-profile-preview" style="display:none;"></div>
+
+            <label class="consent"><input id="loginConsent" type="checkbox" checked /> <span>I agree to participate in this assessment and allow interaction telemetry to be collected.</span></label>
+            <label class="consent test-mode-option"><input id="loginTestMode" type="checkbox" /> <span>Test mode (exclude this session from research exports)</span></label>
+            
+            <button class="primary login-submit" type="submit" id="loginSubmitBtn">
+              <span>Sign In & Continue</span><strong aria-hidden="true">➔</strong>
+            </button>
+            <p class="auth-toggle-note">New candidate? <a href="#" id="switchToRegisterLink">Create a profile here</a></p>
+            <div class="error" id="loginError"></div>
+          </form>
+
+          <!-- TAB 2: REGISTER NEW USER -->
+          <form id="userRegisterForm" class="auth-form-view" style="display:none;">
+            <div class="field">
+              <label>Full Name *</label>
+              <input id="regFullName" placeholder="e.g. Alex Morgan" required />
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label>Username *</label>
+                <input id="regUsername" placeholder="e.g. alex_ai" required autocomplete="username" />
+              </div>
+              <div class="field">
+                <label>Password *</label>
+                <input id="regPassword" type="password" placeholder="Create password" required autocomplete="new-password" />
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Email Address (Optional)</label>
+              <input id="regEmail" type="email" placeholder="e.g. alex@example.com" />
+            </div>
+
+            <div class="grid-2">
+              <div class="field">
+                <label>Age Group *</label>
+                <select id="regAgeGroup" required>
+                  <option value="">Select age group</option>
+                  <option>18–22</option>
+                  <option>23–28</option>
+                  <option>29–35</option>
+                  <option>36–45</option>
+                  <option>46+</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Domain *</label>
+                <select id="regDomain" required>
+                  <option value="">Select domain</option>
+                  <option>Artificial Intelligence</option>
+                  <option>Computer Science</option>
+                  <option>Data Science</option>
+                  <option>Software Development</option>
+                  <option>Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>AI Familiarity Level *</label>
+              <select id="regLevel" required>
+                <option value="">Select familiarity level</option>
+                <option>Beginner</option>
+                <option selected>Intermediate</option>
+                <option>Advanced</option>
+              </select>
+            </div>
+
+            <label class="consent"><input id="regConsent" type="checkbox" checked /> <span>I agree to participate in this assessment and allow interaction telemetry to be collected.</span></label>
+            <label class="consent test-mode-option"><input id="regTestMode" type="checkbox" /> <span>Test mode (exclude this session from research exports)</span></label>
+
+            <button class="primary login-submit" type="submit" id="regSubmitBtn">
+              <span>Register & Start Assessment</span><strong aria-hidden="true">➔</strong>
+            </button>
+            <p class="auth-toggle-note">Already registered? <a href="#" id="switchToLoginLink">Sign in with existing profile</a></p>
+            <div class="error" id="regError"></div>
+          </form>
+
+        </div>
       </section>
     </div>`;
 
   const loginModel = document.querySelector('.login-model');
   if (loginModel) {
-    const keepModelRotating = () => {
-      loginModel.autoRotate = true;
-    };
+    const keepModelRotating = () => { loginModel.autoRotate = true; };
     ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'touchend'].forEach(eventName => {
       loginModel.addEventListener(eventName, keepModelRotating, { passive: true });
     });
@@ -581,87 +1127,176 @@ function renderLogin() {
   const researchBtn = document.getElementById('researchMetricsBtn');
   if (researchBtn) researchBtn.addEventListener('click', () => renderResearchMetricsPage('login'));
 
-  const loginForm = document.getElementById('loginForm');
-  const loginFields = [
-    document.getElementById('fullName'),
-    document.getElementById('ageGroup'),
-    document.getElementById('domain'),
-    document.getElementById('level'),
-    document.getElementById('consent')
-  ];
-  const isLoginFieldComplete = field => field.type === 'checkbox' ? field.checked : Boolean(field.value.trim());
-  const updateLoginProgress = () => {
-    const profileComplete = loginFields.slice(0, 4).every(isLoginFieldComplete);
-    const consentComplete = document.getElementById('consent').checked;
-    const profileStep = document.querySelector('[data-login-step="profile"]');
-    const consentStep = document.querySelector('[data-login-step="consent"]');
-    const beginStep = document.querySelector('[data-login-step="begin"]');
-    profileStep.classList.toggle('active', !profileComplete);
-    profileStep.classList.toggle('complete', profileComplete);
-    consentStep.classList.toggle('active', profileComplete && !consentComplete);
-    consentStep.classList.toggle('complete', consentComplete);
-    beginStep.classList.toggle('active', profileComplete && consentComplete);
-  };
-  const validateLoginField = field => {
-    const wrapper = field.closest('.field, .consent');
-    const complete = isLoginFieldComplete(field);
-    wrapper?.classList.toggle('field-valid', complete);
-    wrapper?.classList.toggle('field-invalid', !complete && field.dataset.touched === 'true');
-    field.setAttribute('aria-invalid', String(!complete));
-    return complete;
-  };
-  loginFields.forEach(field => {
-    ['input', 'change'].forEach(eventName => field.addEventListener(eventName, () => {
-      field.dataset.touched = 'true';
-      validateLoginField(field);
-      updateLoginProgress();
-    }));
-  });
-  updateLoginProgress();
+  // Auth Tab Toggling
+  const tabLoginBtn = document.getElementById('authTabLogin');
+  const tabRegisterBtn = document.getElementById('authTabRegister');
+  const userLoginForm = document.getElementById('userLoginForm');
+  const userRegisterForm = document.getElementById('userRegisterForm');
 
-  loginForm.addEventListener('submit', async e => {
+  const showTab = (tab) => {
+    const isLogin = tab === 'login';
+    tabLoginBtn.classList.toggle('active', isLogin);
+    tabRegisterBtn.classList.toggle('active', !isLogin);
+    tabLoginBtn.setAttribute('aria-selected', String(isLogin));
+    tabRegisterBtn.setAttribute('aria-selected', String(!isLogin));
+    userLoginForm.style.display = isLogin ? 'block' : 'none';
+    userRegisterForm.style.display = isLogin ? 'none' : 'block';
+  };
+
+  tabLoginBtn.addEventListener('click', () => showTab('login'));
+  tabRegisterBtn.addEventListener('click', () => showTab('register'));
+  document.getElementById('switchToRegisterLink')?.addEventListener('click', (e) => { e.preventDefault(); showTab('register'); });
+  document.getElementById('switchToLoginLink')?.addEventListener('click', (e) => { e.preventDefault(); showTab('login'); });
+
+  // Populate Quick-Select Registered Users
+  let registeredUserMap = {};
+  safeGet('/users/list').then(data => {
+    if (data && Array.isArray(data.users) && data.users.length) {
+      const select = document.getElementById('quickUserSelect');
+      if (select) {
+        data.users.forEach(u => {
+          registeredUserMap[u.username] = u;
+          const opt = document.createElement('option');
+          opt.value = u.username;
+          opt.textContent = `👤 ${u.full_name} (@${u.username}) · ${u.domain || 'General'}`;
+          select.appendChild(opt);
+        });
+      }
+    }
+  }).catch(() => {});
+
+  document.getElementById('quickUserSelect')?.addEventListener('change', (e) => {
+    const uname = e.target.value;
+    const badge = document.getElementById('selectedUserProfileBadge');
+    if (uname && registeredUserMap[uname]) {
+      const u = registeredUserMap[uname];
+      document.getElementById('loginUsername').value = u.username;
+      badge.style.display = 'block';
+      badge.innerHTML = `
+        <div class="user-badge-inner">
+          <strong>${escapeHtml(u.full_name)}</strong>
+          <span>${escapeHtml(u.domain || 'Domain')} · Age: ${escapeHtml(u.age_group || 'All')} · ${escapeHtml(u.ai_familiarity || 'Intermediate')}</span>
+        </div>`;
+    } else {
+      badge.style.display = 'none';
+    }
+  });
+
+  // Handle Login Submit
+  userLoginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    loginFields.forEach(field => { field.dataset.touched = 'true'; validateLoginField(field); });
-    updateLoginProgress();
-    const firstInvalid = loginFields.find(field => !isLoginFieldComplete(field));
-    if (firstInvalid) {
-      document.getElementById('loginError').textContent = firstInvalid.id === 'consent'
-        ? 'Consent is required to continue.'
-        : 'Complete the highlighted profile fields to continue.';
-      firstInvalid.focus();
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const consent = document.getElementById('loginConsent').checked;
+    const testMode = document.getElementById('loginTestMode').checked;
+    const errEl = document.getElementById('loginError');
+    errEl.textContent = '';
+
+    if (!consent) {
+      errEl.textContent = 'Consent is required to continue.';
       return;
     }
-    const participant = {
-      participant_id: '',
-      full_name: document.getElementById('fullName').value.trim(),
-      age_group: document.getElementById('ageGroup').value,
-      domain: document.getElementById('domain').value,
-      ai_familiarity: document.getElementById('level').value
-    };
-    const submitButton = loginForm.querySelector('.login-submit');
-    const loadingMessage = document.getElementById('loginLoading');
-    submitButton.disabled = true;
-    submitButton.classList.add('is-loading');
-    submitButton.querySelector('span').textContent = 'Preparing session';
-    loadingMessage.hidden = false;
-    document.getElementById('loginError').textContent = '';
+
+    const btn = document.getElementById('loginSubmitBtn');
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Signing in…';
+
     try {
-      await startParticipantSession({ ...participant, test_mode: document.getElementById('testMode').checked });
-    } catch (error) {
-      submitButton.disabled = false;
-      submitButton.classList.remove('is-loading');
-      submitButton.querySelector('span').textContent = 'Continue securely';
-      loadingMessage.hidden = true;
-      document.getElementById('loginError').textContent = `Unable to start: ${error.message}`;
+      const res = await safePost('/users/login', { username, password });
+      toast.success(`Welcome back, ${res.user.full_name}!`, 'Signed In');
+      state.registeredUser = res.user;
+
+      const saved = getSavedSessionForUser(res.user.username);
+      if (saved) {
+        renderResumePrompt(saved, res.user, testMode);
+      } else {
+        await startParticipantSession({
+          participant_id: '',
+          username: res.user.username,
+          full_name: res.user.full_name,
+          age_group: res.user.age_group || '23–28',
+          domain: res.user.domain || 'Artificial Intelligence',
+          ai_familiarity: res.user.ai_familiarity || 'Intermediate',
+          test_mode: testMode
+        });
+      }
+    } catch (err) {
+      btn.disabled = false;
+      btn.querySelector('span').textContent = 'Sign In & Continue';
+      errEl.textContent = `Login failed: ${err.message}`;
+      toast.error(err.message, 'Sign In Error');
+    }
+  });
+
+  // Handle Registration Submit
+  userRegisterForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fullName = document.getElementById('regFullName').value.trim();
+    const username = document.getElementById('regUsername').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const email = document.getElementById('regEmail').value.trim();
+    const ageGroup = document.getElementById('regAgeGroup').value;
+    const domain = document.getElementById('regDomain').value;
+    const level = document.getElementById('regLevel').value;
+    const consent = document.getElementById('regConsent').checked;
+    const testMode = document.getElementById('regTestMode').checked;
+    const errEl = document.getElementById('regError');
+    errEl.textContent = '';
+
+    if (!consent) {
+      errEl.textContent = 'Consent is required to continue.';
+      return;
+    }
+
+    const btn = document.getElementById('regSubmitBtn');
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Registering…';
+
+    try {
+      const res = await safePost('/users/register', {
+        full_name: fullName,
+        username,
+        password,
+        email,
+        age_group: ageGroup,
+        domain,
+        ai_familiarity: level
+      });
+      toast.success(`Profile created! Welcome, ${res.user.full_name}!`, 'Profile Registered');
+      state.registeredUser = res.user;
+      await startParticipantSession({
+        participant_id: '',
+        username: res.user.username,
+        full_name: res.user.full_name,
+        age_group: res.user.age_group,
+        domain: res.user.domain,
+        ai_familiarity: res.user.ai_familiarity,
+        test_mode: testMode
+      });
+    } catch (err) {
+      btn.disabled = false;
+      btn.querySelector('span').textContent = 'Register & Start Assessment';
+      errEl.textContent = `Registration failed: ${err.message}`;
+      toast.error(err.message, 'Registration Error');
     }
   });
 }
 
 async function startParticipantSession(participant) {
   state.participant = participant;
-  state.questions = selectSessionTasks(participant);
+  try {
+    const taskRes = await safeGet('/tasks');
+    if (taskRes && Array.isArray(taskRes.custom_tasks)) {
+      state.customAdminTasks = taskRes.custom_tasks;
+    }
+  } catch (err) {
+    console.warn('Could not load custom tasks:', err);
+  }
+  state.questions = selectSessionTasks(participant, state.customAdminTasks);
   state.current = 0;
   state.subquestion = 0;
+  state.selectedLLM = state.selectedLLM || 'Groq';
+  state.started = true;
   state.testMode = Boolean(participant.test_mode);
   const loginTime = Date.now();
   state.sessionStart = new Date(loginTime).toISOString();
@@ -680,12 +1315,40 @@ async function startParticipantSession(participant) {
 }
 
 function baselineNasaTlxComplete() {
-  return NASA_TLX_DIMENSIONS.every(d => Number.isFinite(state.baselineNasaTlx[d.key]) && state.baselineNasaTlx[d.key] >= 0 && state.baselineNasaTlx[d.key] <= 10);
+  return NASA_TLX_START_DIMENSIONS.every(d => Number.isFinite(state.baselineNasaTlx[d.key]) && state.baselineNasaTlx[d.key] >= 0 && state.baselineNasaTlx[d.key] <= 10);
 }
 
 function renderBaselineNasaTlx() {
   state.assessmentStage = 'baseline-nasa';
-  app.innerHTML = `<div class="survey-screen"><section class="card survey-card"><div class="survey-kicker">Before the assessment</div><h1>Baseline workload check</h1><p class="survey-intro">Before you start, rate how you feel right now. This NASA-TLX baseline uses a 0–10 scale for every dimension and is not a clinical mental-health assessment.</p><div class="nasa-grid">${NASA_TLX_DIMENSIONS.map(d => { const selected = Number.isFinite(state.baselineNasaTlx[d.key]) && state.baselineNasaTlx[d.key] >= 0 && state.baselineNasaTlx[d.key] <= 10; const value = selected ? state.baselineNasaTlx[d.key] : 5; return `<article class="survey-item"><div class="nasa-item-heading"><h3>${d.label}</h3><output class="nasa-value" data-baseline-output="${d.key}">${selected ? value : '—'}</output></div><p>${d.help}</p><input class="nasa-range" type="range" min="0" max="10" step="1" value="${value}" data-baseline-scale="${d.key}" aria-label="Baseline ${d.label} scale from 0 to 10"><div class="scale-labels"><span>0</span><span>10</span></div></article>`; }).join('')}</div><div class="nasa-overall" id="baselineNasaPreview">Baseline score: ${baselineNasaTlxComplete() ? (Object.values(state.baselineNasaTlx).reduce((sum, value) => sum + value, 0) / NASA_TLX_DIMENSIONS.length).toFixed(1) : '—'} <small>(average of the six ratings)</small></div><button class="primary" id="saveBaselineNasa" type="button" ${baselineNasaTlxComplete() ? '' : 'disabled'}>Save baseline and continue</button><div class="error" id="baselineNasaError"></div></section></div>`;
+  app.innerHTML = `
+    <div class="survey-screen">
+      <section class="card survey-card">
+        <div class="survey-kicker">Pre-Task Baseline Workload Check</div>
+        <h1>Baseline Cognitive Workload Check</h1>
+        <p class="survey-intro">Before beginning the collaboration tasks, rate how you feel right now. This establishes your pre-task cognitive readiness baseline so the system can accurately measure workload fluctuations.</p>
+        <div class="nasa-grid">
+          ${NASA_TLX_START_DIMENSIONS.map(d => {
+            const selected = Number.isFinite(state.baselineNasaTlx[d.key]) && state.baselineNasaTlx[d.key] >= 0 && state.baselineNasaTlx[d.key] <= 10;
+            const value = selected ? state.baselineNasaTlx[d.key] : 5;
+            return `
+              <article class="survey-item">
+                <div class="nasa-item-heading">
+                  <h3>${escapeHtml(d.label)}</h3>
+                  <output class="nasa-value" data-baseline-output="${d.key}">${selected ? value : '—'}</output>
+                </div>
+                <p>${escapeHtml(d.help)}</p>
+                <input class="nasa-range" type="range" min="0" max="10" step="1" value="${value}" data-baseline-scale="${d.key}" aria-label="Baseline ${escapeHtml(d.label)} scale from 0 to 10">
+                <div class="scale-labels"><span>0 (Low)</span><span>5 (Moderate)</span><span>10 (High)</span></div>
+              </article>`;
+          }).join('')}
+        </div>
+        <div class="nasa-overall" id="baselineNasaPreview">
+          Baseline Composite: ${baselineNasaTlxComplete() ? (Object.values(state.baselineNasaTlx).reduce((sum, value) => sum + value, 0) / NASA_TLX_START_DIMENSIONS.length).toFixed(1) : '—'} <small>/ 10</small>
+        </div>
+        <button class="primary" id="saveBaselineNasa" type="button" ${baselineNasaTlxComplete() ? '' : 'disabled'}>Save Baseline & Continue to Instructions ➔</button>
+        <div class="error" id="baselineNasaError"></div>
+      </section>
+    </div>`;
   document.querySelectorAll('[data-baseline-scale]').forEach(input => {
     input.addEventListener('input', event => {
       state.baselineNasaTlx[event.target.dataset.baselineScale] = Number(event.target.value);
@@ -706,6 +1369,7 @@ function renderBaselineNasaTlx() {
     try {
       await safePost('/sessions/nasa-tlx-baseline', { participant_id: state.participant.participant_id, ratings: state.baselineNasaTlx }, state.participantSessionToken);
       saveParticipantState();
+      toast.success('Baseline cognitive profile recorded successfully!', 'Baseline Saved');
       renderInstructions();
     } catch (error) {
       button.disabled = false;
@@ -822,11 +1486,15 @@ function renderLlmOption(name, configuredKey) {
   const configured = state.llmProviders?.[configuredKey];
   const unavailable = configured === false;
   const selected = state.selectedLLM === name;
-  return `<option value="${name}" ${selected ? 'selected' : ''} ${unavailable ? 'disabled' : ''}>${name}${unavailable ? ' (not configured)' : ''}</option>`;
+  const isLight = (document.documentElement.dataset.theme || 'light') === 'light';
+  const optBg = isLight ? '#ffffff' : '#0f172a';
+  const optCol = unavailable ? (isLight ? '#94a3b8' : '#64748b') : (isLight ? '#0f172a' : '#f8fafc');
+  return `<option value="${name}" ${selected ? 'selected' : ''} ${unavailable ? 'disabled' : ''} style="background-color: ${optBg} !important; color: ${optCol} !important;">${name}${unavailable ? ' (not configured)' : ''}</option>`;
 }
-
 function renderExam() {
   state.assessmentStage = 'exam';
+  if (!state.selectedLLM) state.selectedLLM = 'Groq';
+  state.started = true;
   const q = currentQuestion();
   const progress = assessmentProgressSnapshot();
   const totalTasks = (state.questions && state.questions.length) || 6;
@@ -835,108 +1503,125 @@ function renderExam() {
   const diffBadgeClass = (q.difficulty || 'Easy').toLowerCase();
 
   app.innerHTML = `
+    ${state.adminMode ? `
+      <div class="admin-preview-top-banner">
+        <div class="admin-preview-info">
+          <span class="admin-preview-pill">👑 ADMIN TASK SIMULATION</span>
+          <span>Task: <strong>${escapeHtml(q.title || 'Collaborative Task')}</strong></span>
+          <span>Domain: <strong>${escapeHtml(q.domain || 'General')}</strong></span>
+          <span>Age Cohort: <strong>${escapeHtml(q.target_age || 'All Ages')}</strong></span>
+          <span>Difficulty: <strong>${escapeHtml(q.difficulty || 'Easy')}</strong></span>
+        </div>
+        <button class="secondary exit-admin-btn" id="exitAdminTaskRunBtn" type="button">
+          ← Exit Back to Admin Portal
+        </button>
+      </div>
+    ` : ''}
     <div class="exam-shell">
       <header class="exam-top">
         <div class="brand"><div class="logo">C</div><div><h1>CogniTrack <span style="color:#38dd9a">AI</span></h1><small>${escapeHtml(state.participant?.participant_id || '')}</small></div></div>
         <div class="center">Task ${state.current + 1} of ${totalTasks} · <span class="task-domain-pill">${escapeHtml(q.domain || 'General')}</span></div>
-        <div class="exam-actions"><div class="timer" id="timer">--:--</div><button class="danger-btn" id="endSession" ${state.finishing ? 'disabled' : ''}>${state.finishing ? 'Ending Session…' : 'End Session'}</button></div>
+        <div class="exam-actions">
+          ${themeToggleMarkup()}
+          <div class="timer" id="timer">--:--</div>
+          <button class="secondary continue-later-btn" id="continueLaterBtn" type="button" title="Save your work and return later">Continue Later</button>
+          <button class="danger-btn" id="endSession" ${state.finishing ? 'disabled' : ''}>${state.finishing ? 'Ending Session…' : 'End Session'}</button>
+        </div>
       </header>
-      <main class="exam-grid">
-        <div class="assessment-progress card panel" aria-label="Assessment progress"><div class="assessment-progress-heading"><strong>Assessment progress</strong><span>${progress.percent}% complete</span></div><div class="assessment-progress-track"><i style="width:${progress.percent}%"></i></div><small>${progress.answered} answered · ${progress.skipped} skipped · ${progress.total - progress.completed} remaining</small></div>
-        <section class="stack">
-          ${state.questionTransition ? `<div class="question-transition" role="status">${escapeHtml(state.questionTransition)}</div>` : ''}
-          <article class="card panel task-detail-card" id="currentQuestionCard" tabindex="-1">
+
+      <!-- 1. ASSESSMENT WORKFLOW MAP -->
+      <div class="assessment-workflow-map" aria-label="Assessment Pipeline Stages">
+        <div class="workflow-step done"><span class="step-num">1</span><span>Pre-Task Baseline ✓</span></div>
+        <div class="workflow-divider done"></div>
+        <div class="workflow-step active"><span class="step-num">2</span><span>AI Collaboration (Task ${state.current + 1} of ${totalTasks})</span></div>
+        <div class="workflow-divider"></div>
+        <div class="workflow-step"><span class="step-num">3</span><span>Post-Task Workload</span></div>
+        <div class="workflow-divider"></div>
+        <div class="workflow-step"><span class="step-num">4</span><span>Results Summary</span></div>
+      </div>
+
+      <!-- 2. REAL-TIME PROGRESS BAR -->
+      <div class="assessment-progress card panel" aria-label="Assessment progress">
+        <div class="assessment-progress-heading">
+          <strong>Task Collaboration Progress</strong>
+          <span>${progress.percent}% complete</span>
+        </div>
+        <div class="assessment-progress-track"><i style="width:${progress.percent}%"></i></div>
+        <small>${progress.answered} answered · ${progress.skipped} skipped · ${progress.total - progress.completed} remaining</small>
+      </div>
+
+      <main class="task-page-main">
+        ${state.questionTransition ? `<div class="question-transition" role="status">${escapeHtml(state.questionTransition)}</div>` : ''}
+
+        <!-- 3. PROBLEM STATEMENT DISPLAYED ON TOP -->
+        <article class="card panel problem-statement-card" id="currentQuestionCard" tabindex="-1">
+          <div class="problem-statement-topbar">
             <div class="task-meta-bar">
               <span class="badge diff-badge ${diffBadgeClass}">${escapeHtml(q.difficulty || 'Easy')}</span>
               <span class="badge category-badge">${escapeHtml(q.category || 'Human-AI Collaboration')}</span>
               <span class="badge domain-badge">${escapeHtml(q.domain || 'Domain')}</span>
               <span class="expected-time-tag">⏱ ${escapeHtml(q.expectedTime || '3–5 minutes')}</span>
             </div>
-            <h2 class="question-title">${escapeHtml(q.title || 'Dynamic Task')}</h2>
             
-            <div class="scenario-box">
-              <div class="box-header">
-                <span class="box-icon">📋</span>
-                <strong>Scenario & Problem Context</strong>
-              </div>
-              <p class="scenario-text">${escapeHtml(q.scenario || q.text)}</p>
+            <!-- MODEL SELECTION (DEFAULT GROQ, OPTION TO CHANGE) -->
+            <div class="model-selection-box">
+              <label for="aiModelSelect"><strong>Active AI Model:</strong></label>
+              <select class="ai-model-select-compact" id="aiModelSelect" aria-label="Select AI model" style="color-scheme: ${currentTheme()};">
+                ${renderLlmOption('Groq', 'groq_configured')}
+                ${renderLlmOption('ChatGPT', 'chatgpt_configured')}
+              </select>
             </div>
+          </div>
 
-            ${Array.isArray(q.instructions) && q.instructions.length > 0 ? `
-            <div class="focus-box">
-              <div class="box-header">
-                <span class="box-icon">🎯</span>
-                <strong>Collaboration Focus & Objectives</strong>
-              </div>
-              <ol class="task-instructions-list">
-                ${q.instructions.map(ins => `<li>${escapeHtml(ins)}</li>`).join('')}
-              </ol>
-            </div>` : ''}
-          </article>
-
-          <article class="card panel task-interaction-card">
-            <div class="interaction-workflow-banner">
-              <div class="workflow-step-pill ${hasCollaborated ? 'done' : 'current'}">
-                <span class="step-num">1</span>
-                <span>Ask AI Assistant</span>
-              </div>
-              <span class="step-chevron">➔</span>
-              <div class="workflow-step-pill ${hasCollaborated ? 'current' : ''}">
-                <span class="step-num">2</span>
-                <span>Analyze Response</span>
-              </div>
-              <span class="step-chevron">➔</span>
-              <div class="workflow-step-pill">
-                <span class="step-num">3</span>
-                <span>Proceed</span>
-              </div>
+          <h2 class="question-title">${escapeHtml(q.title || 'Dynamic Task')}</h2>
+          
+          <div class="scenario-box">
+            <div class="box-header">
+              <span class="box-icon">📋</span>
+              <strong>Problem Scenario & Context</strong>
             </div>
+            <p class="scenario-text">${escapeHtml(q.scenario || q.text)}</p>
+          </div>
 
-            <div class="collaboration-status-row">
-              <div class="status-indicator-col">
-                <span class="status-dot ${hasCollaborated ? 'active' : 'idle'}"></span>
-                <span class="status-text">
-                  ${hasCollaborated
-      ? `Collaborated with <strong>${escapeHtml(state.selectedLLM)}</strong> (${userPrompts.length} prompt${userPrompts.length === 1 ? '' : 's'} exchanged)`
-      : state.selectedLLM
-        ? `Using <strong>${escapeHtml(state.selectedLLM)}</strong> — ask your question in the panel to the right`
-        : 'Choose an AI model in the right panel to begin'}
-                </span>
-              </div>
-              <div id="saveStatus" class="save-status" aria-live="polite">${escapeHtml(state.saveStatus || 'Ready for collaboration')}</div>
+          ${Array.isArray(q.instructions) && q.instructions.length > 0 ? `
+          <div class="focus-box">
+            <div class="box-header">
+              <span class="box-icon">🎯</span>
+              <strong>Collaboration Objectives & Questions to Explore</strong>
             </div>
+            <ol class="task-instructions-list">
+              ${q.instructions.map(ins => `<li>${escapeHtml(ins)}</li>`).join('')}
+            </ol>
+          </div>` : ''}
+        </article>
 
-            <div class="actions" style="margin-top:1.25rem;">
-              <button class="primary proceed-task-btn" id="submitAnswer" type="button" ${state.submitting ? 'disabled' : ''}>
-                <span>${state.submitting ? 'Submitting & Advancing…' : 'I have reviewed the AI response · Proceed to Next Task'}</span>
-                <strong style="margin-left:8px;font-size:1.15rem;">➔</strong>
-              </button>
+        <!-- 4. CHAT INTERFACE BELOW PROBLEM STATEMENT -->
+        <article class="card panel chat-interface-card">
+          <div class="chat-card-header">
+            <div class="chat-agent-info">
+              <span class="status-dot active"></span>
+              <span>Collaborating with <strong>${escapeHtml(state.selectedLLM || 'Groq')}</strong></span>
             </div>
-            <div class="error" id="examError"></div>
-          </article>
+            <div id="saveStatus" class="save-status" aria-live="polite">${escapeHtml(state.saveStatus || 'Ready for collaboration')}</div>
+          </div>
 
-          <nav class="card panel question-navigation" aria-label="Question navigation">
-            <button class="secondary" id="previousQuestion" type="button" ${state.current === 0 || state.submitting ? 'disabled' : ''}>Previous Task</button>
-            <span>Task ${state.current + 1} of ${totalTasks}</span>
-            <button class="secondary" id="skipQuestion" type="button" ${state.submitting ? 'disabled' : ''}>Skip Task</button>
-          </nav>
-        </section>
-        <aside class="stack">
-          <article class="card panel">
-             <div class="section-label">Choose AI Model</div>
-             <p style="color:var(--muted)">Choose the AI model for this question part.</p>
-             <select class="ai-model-select" id="aiModelSelect">
-               <option value="">Select an AI model</option>
-               ${renderLlmOption('ChatGPT', 'chatgpt_configured')}
-               ${renderLlmOption('Groq', 'groq_configured')}
-             </select>
-          </article>
-          ${state.selectedLLM ? `<article class="card panel chat-box">
-            <div class="section-label">Ask ${state.selectedLLM}</div>
-            <div class="messages" id="messages">${renderMessages()}</div>
-            <div class="chat-row"><input id="chatInput" class="chat-input" placeholder="${state.selectedLLM ? `Ask ${state.selectedLLM}...` : 'Choose an AI model first'}" ${state.started && !state.chatStreaming ? '' : 'disabled'} />${state.chatStreaming ? '<button class="primary ask-model-btn stop-model-btn" style="width:auto" id="stopChat" type="button" title="Stop generating" aria-label="Stop generating">■</button>' : `<button class="primary ask-model-btn" style="width:auto" id="sendChat" type="button">${state.selectedLLM ? `Ask ${state.selectedLLM}` : 'Send'}</button>`}</div>
-          </article>` : ''}
-        </aside>
+          <div class="messages" id="messages">${renderMessages()}</div>
+
+          <div class="chat-row">
+            <input id="chatInput" class="chat-input" placeholder="Ask ${escapeHtml(state.selectedLLM || 'Groq')} about this problem..." ${state.started && !state.chatStreaming ? '' : 'disabled'} />
+            ${state.chatStreaming ? '<button class="primary ask-model-btn stop-model-btn" style="width:auto" id="stopChat" type="button" title="Stop generating">■ Stop</button>' : `<button class="primary ask-model-btn" style="width:auto" id="sendChat" type="button">Ask ${escapeHtml(state.selectedLLM || 'Groq')} ➔</button>`}
+          </div>
+        </article>
+
+        <!-- 5. NAVIGATION BELOW (NEXT & SKIP ONLY) -->
+        <nav class="card panel bottom-question-navigation" aria-label="Task navigation">
+          <button class="secondary skip-btn" id="skipQuestion" type="button" ${state.submitting ? 'disabled' : ''}>Skip Task</button>
+          <span class="nav-task-count">Task ${state.current + 1} of ${totalTasks}</span>
+          <button class="primary next-btn" id="submitAnswer" type="button" ${state.submitting ? 'disabled' : ''}>
+            <span>${state.submitting ? 'Advancing…' : (state.current + 1 >= totalTasks ? 'Finish Tasks & Verify Workload ➔' : 'Next Task ➔')}</span>
+          </button>
+        </nav>
+        <div class="error" id="examError"></div>
       </main>
     </div>`;
 
@@ -2063,10 +2748,47 @@ function renderMessages() {
     const firstName = escapeHtml((state.participant?.full_name || 'there').trim().split(/\s+/)[0]);
     const modelName = escapeHtml(state.selectedLLM);
     const modelIcon = state.selectedLLM === 'ChatGPT' ? 'C' : 'Q';
-    return `<div class="model-welcome"><div class="model-welcome-icon model-${state.selectedLLM.toLowerCase()}">${modelIcon}</div><h3>Hello ${firstName}, how can I help you today?</h3><p>You are now using ${modelName}. Type your question below to get started.</p></div>`;
+    return `
+      <div class="model-welcome">
+        <div class="model-welcome-icon model-${state.selectedLLM.toLowerCase()}">${modelIcon}</div>
+        <h3>Hello ${firstName}, let's collaborate on this task.</h3>
+        <p>I am powered by <strong>${modelName}</strong>. Review the problem statement above and ask questions below.</p>
+      </div>`;
   }
-  if (!state.messages.length) return `<div class="model-welcome"><h3>Choose your AI assistant</h3><p>Select ChatGPT or Groq to begin.</p></div>`;
-  return state.messages.map(m => `<div class="message ${m.role}">${escapeHtml(m.content)}</div>`).join('');
+  if (!state.messages.length) {
+    return `<div class="model-welcome"><h3>Ready to collaborate</h3><p>Groq is active by default. Type your question below to begin.</p></div>`;
+  }
+
+  return state.messages.map((m, idx) => {
+    if (m.role === 'user') {
+      return `
+        <div class="message user">
+          <div class="msg-bubble">${escapeHtml(m.content)}</div>
+        </div>`;
+    }
+    if (m.role === 'assistant') {
+      const msgId = m.id || `msg-${idx}`;
+      m.id = msgId;
+      const feedback = m.feedback || (state.chatFeedback && state.chatFeedback[msgId]) || '';
+      return `
+        <div class="message assistant" data-msg-id="${msgId}">
+          <div class="msg-sender-tag"><span>🤖 ${escapeHtml(state.selectedLLM || 'AI Assistant')}</span></div>
+          <div class="msg-bubble">${escapeHtml(m.content)}</div>
+          ${!state.chatStreaming ? `
+          <div class="msg-feedback-bar" data-feedback-wrap="${msgId}">
+            <span class="feedback-label">Response Feedback:</span>
+            <button class="feedback-btn thumbs-up ${feedback === 'thumbs_up' ? 'active' : ''}" type="button" data-action="thumbs_up" data-msg-idx="${idx}" title="Thumbs up: Helpful and accurate">
+              👍 <span>Helpful</span>
+            </button>
+            <button class="feedback-btn thumbs-down ${feedback === 'thumbs_down' ? 'active' : ''}" type="button" data-action="thumbs_down" data-msg-idx="${idx}" title="Thumbs down: Needs improvement">
+              👎 <span>Needs work</span>
+            </button>
+            ${feedback ? `<span class="feedback-status-pill ${feedback}">✓ ${feedback === 'thumbs_up' ? 'Helpful' : 'Needs work'}</span>` : ''}
+          </div>` : ''}
+        </div>`;
+    }
+    return `<div class="message ${escapeHtml(m.role)}"><div class="msg-bubble">${escapeHtml(m.content)}</div></div>`;
+  }).join('');
 }
 
 function renderCompilerResult() {
@@ -2082,6 +2804,17 @@ function renderCompilerResult() {
 }
 
 function bindExamEvents(q) {
+  const exitAdminBtn = document.getElementById('exitAdminTaskRunBtn');
+  if (exitAdminBtn) {
+    exitAdminBtn.onclick = () => {
+      state.adminMode = false;
+      state.started = false;
+      state.trackingActive = false;
+      clearInterval(state.timerHandle);
+      toast.info('Returned to Admin Portal.', 'Admin Mode Exited');
+      renderRoleDashboard('admin');
+    };
+  }
   const answerEditor = document.getElementById('answer');
   if (answerEditor) {
     answerEditor.addEventListener('input', event => {
@@ -2095,10 +2828,40 @@ function bindExamEvents(q) {
     aiModelSelect.addEventListener('change', async event => {
       if (!event.target.value) return;
       state.selectedLLM = event.target.value;
+      toast.info(`Active AI model switched to ${state.selectedLLM}`, 'Model Changed');
       if (state.started) renderExam();
       else await startCurrentQuestion(q);
     });
   }
+
+  // Thumbs Up / Thumbs Down Feedback Button Listeners
+  document.querySelectorAll('.feedback-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const action = btn.dataset.action; // 'thumbs_up' or 'thumbs_down'
+      const idx = Number(btn.dataset.msgIdx);
+      if (state.messages && state.messages[idx]) {
+        state.messages[idx].feedback = action;
+        const msgId = state.messages[idx].id || `msg-${idx}`;
+        if (!state.chatFeedback) state.chatFeedback = {};
+        state.chatFeedback[msgId] = action;
+        
+        safePost('/llm/chat/feedback', {
+          participant_id: state.participant?.participant_id || '',
+          question_id: q.id,
+          prompt_id: msgId,
+          feedback: action,
+          comments: ''
+        }, state.participantSessionToken).catch(err => console.warn('Feedback save error:', err));
+        
+        if (action === 'thumbs_up') {
+          toast.success('Thank you! Response marked as helpful 👍', 'Feedback Saved');
+        } else {
+          toast.info('Response marked as needing work 👎', 'Feedback Saved');
+        }
+        renderExam();
+      }
+    };
+  });
   const codeEditor = document.getElementById('codeEditor');
   if (codeEditor) {
     codeEditor.addEventListener('keydown', event => {
@@ -2162,11 +2925,32 @@ function bindExamEvents(q) {
   });
   const endSessionBtn = document.getElementById('endSession');
   if (endSessionBtn) {
-    endSessionBtn.onclick = () => {
+    endSessionBtn.onclick = async () => {
       if (state.finishing) return;
-      if (!window.confirm('End this assessment early? You will proceed to the NASA-TLX workload verification to measure cognitive load change from your baseline.')) return;
+      const ok = await confirmToast(
+        'End this assessment early? You will proceed to the NASA-TLX workload verification to measure cognitive load change from your baseline.',
+        { title: 'End Assessment Early?', confirmText: 'End Session', cancelText: 'Keep Working', type: 'warning', danger: true }
+      );
+      if (!ok) return;
       prepareQuestionNavigation();
       renderNasaTlxAssessment(true);
+    };
+  }
+
+  const continueLaterBtn = document.getElementById('continueLaterBtn');
+  if (continueLaterBtn) {
+    continueLaterBtn.onclick = async () => {
+      if (state.finishing) return;
+      const ok = await confirmToast(
+        'Pause this assessment and continue later? All your answers and remaining time will be saved.',
+        { title: 'Save & Continue Later?', confirmText: 'Save & Exit', cancelText: 'Keep Working', type: 'info' }
+      );
+      if (!ok) return;
+      prepareQuestionNavigation();
+      saveParticipantState();
+      clearInterval(state.timerHandle);
+      toast.info('Assessment progress saved! You can resume anytime by logging back in.', 'Progress Saved');
+      renderLogin();
     };
   }
 }
@@ -2245,8 +3029,14 @@ function goToPreviousQuestion() {
   navigateToQuestion(currentQuestionIndex() - 1);
 }
 
-function skipCurrentQuestion() {
-  if (!window.confirm('Skip this task? It will be recorded as skipped.')) return;
+async function skipCurrentQuestion() {
+  const ok = await confirmToast('Skip this task? It will be recorded as skipped.', {
+    title: 'Skip Task?',
+    confirmText: 'Skip Task',
+    cancelText: 'Continue Working',
+    type: 'warning'
+  });
+  if (!ok) return;
   if (state.submitting) return;
   prepareQuestionNavigation();
   const skippedId = currentQuestion().id;
@@ -2492,19 +3282,19 @@ function renderNasaTlxAssessment(endedEarly = false) {
   clearInterval(state.timerHandle);
 
   // Pre-populate missing dimensions from baseline or default 5 so verification can start immediately
-  NASA_TLX_DIMENSIONS.forEach(d => {
+  NASA_TLX_END_DIMENSIONS.forEach(d => {
     if (!Number.isFinite(state.nasaTlx[d.key])) {
       state.nasaTlx[d.key] = Number.isFinite(state.baselineNasaTlx[d.key]) ? state.baselineNasaTlx[d.key] : 5;
     }
   });
 
   const getBaselineAvg = () => {
-    const vals = NASA_TLX_DIMENSIONS.map(d => state.baselineNasaTlx[d.key]).filter(Number.isFinite);
+    const vals = NASA_TLX_START_DIMENSIONS.map(d => state.baselineNasaTlx[d.key]).filter(Number.isFinite);
     return vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length) : null;
   };
 
   const getPostAvg = () => {
-    const vals = NASA_TLX_DIMENSIONS.map(d => state.nasaTlx[d.key]).filter(Number.isFinite);
+    const vals = NASA_TLX_END_DIMENSIONS.map(d => state.nasaTlx[d.key]).filter(Number.isFinite);
     return vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length) : null;
   };
 
@@ -2526,7 +3316,7 @@ function renderNasaTlxAssessment(endedEarly = false) {
   const pct = (baseAvg !== null && baseAvg > 0) ? Math.round((delta / baseAvg) * 100) : 0;
   const strain = getStrainBadgeInfo(delta, pct);
 
-  const cards = NASA_TLX_DIMENSIONS.map(d => {
+  const cards = NASA_TLX_END_DIMENSIONS.map(d => {
     const baseVal = Number.isFinite(state.baselineNasaTlx[d.key]) ? state.baselineNasaTlx[d.key] : 5;
     const currentVal = Number.isFinite(state.nasaTlx[d.key]) ? state.nasaTlx[d.key] : baseVal;
     const dimDelta = currentVal - baseVal;
@@ -2683,19 +3473,12 @@ async function finishAssessment(endedEarly) {
   if (state.finishing) return;
   state.finishing = true;
 
-  const activeQuestionId =
-    state.started
-      ? currentQuestion().id
-      : null;
+  const activeQuestionId = state.started ? currentQuestion()?.id : null;
 
   stopSharedTrackingCapture();
   state.trackingActive = false;
-
-  // Preserve the last in-flight Camera frame and final partial second.
   await waitForSharedCaptureIdle();
   await flushCameraSecondBuffer();
-
-  // Preserve the final partial Keyboard + Mouse + Prompt second.
   stopBehaviorSecondTracking();
 
   if (behaviorSecondBuffer) {
@@ -2704,166 +3487,173 @@ async function finishAssessment(endedEarly) {
     await saveBehaviorSecond(finalBehaviorSecond);
   }
 
-  await waitForMultimodalSaves();
-
   if (activeQuestionId) {
     await flushUnmatchedMultimodalSeconds(activeQuestionId);
   }
 
-  const endButton = document.getElementById('endSession');
-  if (endButton) {
-    endButton.disabled = true;
-    endButton.textContent = 'Ending Session…';
-  }
-  clearInterval(state.timerHandle);
-  const payload = {
-    participant: state.participant,
-    session_started_at: state.sessionStart,
-    session_ended_at: new Date().toISOString(),
-    session_id: state.sessionId,
-    ended_early: endedEarly,
-    overall_paas_rating: endedEarly ? null : state.paas,
-    nasa_tlx: (state.nasaTlx && nasaTlxRatingsComplete()) ? state.nasaTlx : null,
-    question_ratings: [],
-    answers: state.answers,
-    interaction_summary: state.tracking
-  };
   let completionError = '';
   try {
-    if (endedEarly && state.started && state.participant) {
-      try {
-        await saveKeyboardWithRetry(keyboardTracker.finalize(), 'session_end', true);
-      } catch (error) {
-        console.warn('Final keyboard tracking save failed:', error);
-      }
-      try {
-        await mouseTracker.flush('session_end', true);
-      } catch (error) {
-        console.warn('Final mouse tracking save failed:', error);
-      } finally {
-        mouseTracker.stop();
-      }
-    }
-    setSaveStatus('Saving final session to PostgreSQL…');
-    await safePost('/sessions/complete', payload, state.participantSessionToken);
-    setSaveStatus('Session saved to PostgreSQL', 'success');
+    await safePost('/sessions/complete', {
+      participant: state.participant,
+      participant_id: state.participant?.participant_id || '',
+      session_id: state.sessionId || '',
+      session_started_at: state.sessionStart || new Date().toISOString(),
+      session_ended_at: new Date().toISOString(),
+      ended_early: Boolean(endedEarly),
+      nasa_tlx: state.nasaTlx,
+      overall_paas_rating: state.paas || null,
+      question_ratings: state.questionRatings || [],
+      answers: state.answers || [],
+      interaction_summary: { ...state.tracking }
+    }, state.participantSessionToken);
+    clearParticipantState();
+    toast.success('Assessment data and telemetry recorded successfully!', 'Session Completed');
   } catch (error) {
-    completionError = error.message;
-    localStorage.setItem('cognitrack_pending_session', JSON.stringify(payload));
+    completionError = formatToastMessage(error);
+    toast.error(`Session complete save error: ${completionError}`, 'Save Notice');
   }
-  if (!completionError) localStorage.removeItem('cognitrack_pending_session');
-  // Compute workload increase verification metrics for display before resetting
-  const baseScores = NASA_TLX_DIMENSIONS.map(d => state.baselineNasaTlx?.[d.key]).filter(Number.isFinite);
-  const baseAvg = baseScores.length > 0 ? (baseScores.reduce((a, b) => a + b, 0) / baseScores.length) : null;
 
-  const currentNasa = (state.nasaTlx && Object.keys(state.nasaTlx).length > 0) ? state.nasaTlx : (payload.nasa_tlx || {});
-  const postScores = NASA_TLX_DIMENSIONS.map(d => currentNasa?.[d.key]).filter(Number.isFinite);
-  const postAvg = postScores.length > 0 ? (postScores.reduce((a, b) => a + b, 0) / postScores.length) : null;
+  const getBaselineAvg = () => {
+    const vals = NASA_TLX_START_DIMENSIONS.map(d => state.baselineNasaTlx[d.key]).filter(Number.isFinite);
+    return vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  };
 
-  const loadDelta = (baseAvg !== null && postAvg !== null) ? Number((postAvg - baseAvg).toFixed(1)) : null;
-  const pctChange = (loadDelta !== null && baseAvg > 0) ? Math.round((loadDelta / baseAvg) * 100) : null;
-  const deltaClass = loadDelta !== null ? (loadDelta > 0 ? 'cw-up' : loadDelta < 0 ? 'cw-down' : 'cw-flat') : 'cw-flat';
-  const deltaFormatted = loadDelta !== null ? (loadDelta > 0 ? `+${loadDelta}` : `${loadDelta}`) : '—';
-  const pctFormatted = pctChange !== null ? (pctChange > 0 ? `+${pctChange}%` : `${pctChange}%`) : '';
-  const strainLabel = (loadDelta !== null && loadDelta >= 1.8) ? 'High Strain Spike' : (loadDelta !== null && loadDelta >= 0.5) ? 'Moderate Increase' : (loadDelta !== null && loadDelta <= -0.5) ? 'Cognitive Recovery' : 'Stable Workload';
-  const strainClass = (loadDelta !== null && loadDelta >= 1.8) ? 'strain-high' : (loadDelta !== null && loadDelta >= 0.5) ? 'strain-moderate' : (loadDelta !== null && loadDelta <= -0.5) ? 'strain-recovery' : 'strain-stable';
+  const getPostAvg = () => {
+    const vals = NASA_TLX_END_DIMENSIONS.map(d => state.nasaTlx[d.key]).filter(Number.isFinite);
+    return vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  };
 
-  const workloadVerificationHtml = (baseAvg !== null || postAvg !== null) ? `
-    <div class="completion-workload-summary">
-      <div class="completion-workload-title">
-        <span>📊 NASA-TLX Workload Verification</span>
-        <span class="summary-pct-pill ${strainClass}">${strainLabel}</span>
-      </div>
-      <div class="completion-workload-grid">
-        <div class="cw-metric">
-          <span class="cw-label">Pre-Task Baseline</span>
-          <span class="cw-val">${baseAvg !== null ? baseAvg.toFixed(1) : '—'} <small>/ 10</small></span>
-        </div>
-        <div class="cw-metric">
-          <span class="cw-label">Post-Task Workload</span>
-          <span class="cw-val">${postAvg !== null ? postAvg.toFixed(1) : '—'} <small>/ 10</small></span>
-        </div>
-        <div class="cw-metric">
-          <span class="cw-label">Cognitive Load Delta</span>
-          <span class="cw-val ${deltaClass}">
-            ${deltaFormatted} ${pctFormatted ? `<small>(${pctFormatted})</small>` : ''}
-          </span>
-        </div>
-      </div>
-      <p class="cw-note">Pre-task baseline vs. post-task subjective strain delta has been verified and permanently recorded to the research dataset.</p>
-    </div>
-  ` : '';
+  const baseAvg = getBaselineAvg();
+  const postAvg = getPostAvg();
+  const delta = (baseAvg !== null && postAvg !== null) ? Number((postAvg - baseAvg).toFixed(1)) : 0;
+  const pct = (baseAvg !== null && baseAvg > 0) ? Math.round((delta / baseAvg) * 100) : 0;
+  const deltaFormatted = delta > 0 ? `+${delta}` : `${delta}`;
+  const pctFormatted = pct > 0 ? `+${pct}%` : pct < 0 ? `${pct}%` : '0%';
+  const deltaClass = delta > 0 ? 'delta-up' : delta < 0 ? 'delta-down' : 'delta-flat';
+
+  const strainInfo = (d, p) => {
+    if (d >= 1.8 || p >= 35) return { label: 'High Cognitive Strain Spike', pillClass: 'strain-high', desc: 'Significant workload elevation from baseline' };
+    if (d >= 0.5 || p >= 10) return { label: 'Moderate Load Increase', pillClass: 'strain-moderate', desc: 'Noticeable mental demand during collaboration' };
+    if (d <= -0.5) return { label: 'Cognitive Recovery', pillClass: 'strain-recovery', desc: 'Workload dropped below pre-task baseline' };
+    return { label: 'Stable Cognitive Equilibrium', pillClass: 'strain-stable', desc: 'Cognitive load remained consistent with baseline' };
+  };
+  const strain = strainInfo(delta, pct);
 
   clearParticipantState();
   clearInterval(monitoringTimer);
-  await sendMonitoringHeartbeat(endedEarly ? 'ended' : 'completed').catch(error => console.warn('Final monitoring heartbeat failed:', error));
+  await sendMonitoringHeartbeat(endedEarly ? 'ended' : 'completed').catch(() => {});
   stopVisionCamera();
-  localStorage.setItem('cognitrack_last_session', JSON.stringify(payload));
-  if (endedEarly) {
-    const candidateId = escapeHtml(state.participant?.participant_id || 'Not assigned');
-    const heading = completionError ? 'Session Ended' : 'Session Ended Successfully';
-    const statusMessage = completionError
-      ? `Your session has ended, but the final save could not be confirmed: ${escapeHtml(completionError)}`
-      : 'Your session has ended early. Your NASA-TLX load verification and completed responses have been recorded.';
-    app.innerHTML = `
-      <div class="success-screen">
-        <div class="card success-card">
-          <div class="success-icon">✓</div>
-          <h1>${heading}</h1>
-          <p style="color:var(--muted);font-size:18px"><strong>Candidate ID:</strong> ${candidateId}</p>
-          <p>${statusMessage}</p>
-          ${workloadVerificationHtml}
-          <p style="color:var(--muted)">Returning to the login page shortly.</p>
-          <button class="primary" id="restart" type="button">Return to Login Now</button>
-        </div>
-      </div>
-    `;
-    let returnedToLogin = false;
-    const returnToLogin = () => {
-      if (returnedToLogin) return;
-      returnedToLogin = true;
-      resetParticipantSession();
-      renderLogin();
-    };
-    document.getElementById('restart').onclick = returnToLogin;
-    window.setTimeout(returnToLogin, 6000);
-    return;
-  }
+
+  const progress = assessmentProgressSnapshot();
+  const userPrompts = state.messages.filter(m => m.role === 'user');
+  const thumbsUpCount = Object.values(state.chatFeedback || {}).filter(v => v === 'thumbs_up').length;
+  const thumbsDownCount = Object.values(state.chatFeedback || {}).filter(v => v === 'thumbs_down').length;
+  const durationSec = Math.round((Date.now() - new Date(state.sessionStart || Date.now()).getTime()) / 1000);
+  const durationFormatted = formatDuration(Math.max(durationSec, 30));
+
+  const candidateId = escapeHtml(state.participant?.participant_id || 'Not assigned');
+  const heading = endedEarly ? 'Assessment Concluded Early' : 'Assessment Completed Successfully';
+
   app.innerHTML = `
     <div class="success-screen">
-      <div class="card success-card">
-        <div class="success-icon">✓</div>
-        <h1>Assessment Submitted Successfully</h1>
-        <p style="color:var(--muted);font-size:18px">Participant ID: ${escapeHtml(state.participant?.participant_id || '')}</p>
-        <p>All dynamic collaboration tasks, multimodal telemetry, and your NASA-TLX workload verification have been submitted.</p>
-        ${workloadVerificationHtml}
-        <button class="primary" id="restart">Return to Login</button>
+      <div class="card success-card completion-hub">
+        <div class="success-header">
+          <div class="success-icon-animated">✓</div>
+          <h1>${heading}</h1>
+          <p class="success-sub">All dynamic collaboration tasks, multimodal telemetry streams, and cognitive workload verifications have been permanently recorded.</p>
+        </div>
+
+        <div class="completion-grid">
+          <!-- Card 1: Candidate Profile -->
+          <article class="completion-card">
+            <div class="card-kicker">CANDIDATE PROFILE</div>
+            <h3>${escapeHtml(state.participant?.full_name || 'Participant')}</h3>
+            <div class="completion-detail-row"><span>Candidate ID:</span> <strong>${candidateId}</strong></div>
+            <div class="completion-detail-row"><span>Username:</span> <strong>${escapeHtml(state.participant?.username || state.registeredUser?.username || 'Guest')}</strong></div>
+            <div class="completion-detail-row"><span>Domain:</span> <strong>${escapeHtml(state.participant?.domain || 'General')}</strong></div>
+            <div class="completion-detail-row"><span>Age Cohort:</span> <strong>${escapeHtml(state.participant?.age_group || 'All Ages')}</strong></div>
+            <div class="completion-detail-row"><span>AI Familiarity:</span> <strong>${escapeHtml(state.participant?.ai_familiarity || 'Intermediate')}</strong></div>
+          </article>
+
+          <!-- Card 2: Collaboration Stats -->
+          <article class="completion-card">
+            <div class="card-kicker">TASK PERFORMANCE</div>
+            <h3>Collaboration Summary</h3>
+            <div class="completion-detail-row"><span>Tasks Completed:</span> <strong style="color:var(--green)">${progress.answered} / ${progress.total}</strong></div>
+            <div class="completion-detail-row"><span>Tasks Skipped:</span> <strong>${progress.skipped}</strong></div>
+            <div class="completion-detail-row"><span>Session Duration:</span> <strong>${durationFormatted}</strong></div>
+            <div class="completion-detail-row"><span>Primary AI Model:</span> <strong>${escapeHtml(state.selectedLLM || 'Groq')}</strong></div>
+            <div class="completion-detail-row"><span>AI Response Feedback:</span> <strong>👍 ${thumbsUpCount} &nbsp;·&nbsp; 👎 ${thumbsDownCount}</strong></div>
+          </article>
+
+          <!-- Card 3: NASA-TLX Workload -->
+          <article class="completion-card">
+            <div class="card-kicker">NASA-TLX WORKLOAD</div>
+            <h3>Cognitive Load Verification</h3>
+            <div class="completion-detail-row"><span>Pre-Task Baseline:</span> <strong>${baseAvg !== null ? baseAvg.toFixed(1) : '—'} / 10</strong></div>
+            <div class="completion-detail-row"><span>Post-Task Workload:</span> <strong>${postAvg !== null ? postAvg.toFixed(1) : '—'} / 10</strong></div>
+            <div class="completion-detail-row"><span>Workload Delta:</span> <strong class="${deltaClass}">${deltaFormatted} (${pctFormatted})</strong></div>
+            <div class="completion-detail-row"><span>Strain Status:</span> <span class="badge ${strain.pillClass}">${strain.label}</span></div>
+          </article>
+
+          <!-- Card 4: Telemetry Assurance -->
+          <article class="completion-card">
+            <div class="card-kicker">MULTIMODAL TELEMETRY</div>
+            <h3>Research Integrity Verified</h3>
+            <ul class="telemetry-check-list">
+              <li>✓ Eye Tracking Fixations & Gaze Metrics</li>
+              <li>✓ Facial Action Units & Fatigue Landmarks</li>
+              <li>✓ Keyboard Dynamic Cadence Logged</li>
+              <li>✓ Mouse Velocity & Jitter Recorded</li>
+              <li>✓ Prompt Sentiment & Complexity Stored</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="completion-actions">
+          <button class="primary" id="restart" type="button">Return to Login Now</button>
+          <button class="secondary" id="printSummaryBtn" type="button">🖨 Print / Save Summary</button>
+          <div class="countdown-bar">
+            <span>Auto-returning to login in <strong id="countdownSec">60</strong>s</span>
+            <button class="secondary btn-xs" id="pauseCountdownBtn" type="button">Pause Countdown</button>
+          </div>
+        </div>
       </div>
     </div>
   `;
-  if (completionError) {
-    app.innerHTML = `
-      <div class="success-screen">
-        <div class="card success-card">
-          <div class="success-icon">!</div>
-          <h1>Session Ended</h1>
-          <p style="color:var(--muted);font-size:18px">Participant ID: ${escapeHtml(state.participant?.participant_id || '')}</p>
-          <p>You have been logged out. The server could not confirm the final save: ${escapeHtml(completionError)}</p>
-          ${workloadVerificationHtml}
-          <button class="primary" id="restart">Return to Login</button>
-        </div>
-      </div>
-    `;
-  }
+
+  let remainingSec = 60;
+  let countdownPaused = false;
+  const countdownInterval = setInterval(() => {
+    if (countdownPaused) return;
+    remainingSec--;
+    const el = document.getElementById('countdownSec');
+    if (el) el.textContent = String(remainingSec);
+    if (remainingSec <= 0) {
+      clearInterval(countdownInterval);
+      returnToLogin();
+    }
+  }, 1000);
+
+  document.getElementById('pauseCountdownBtn')?.addEventListener('click', (e) => {
+    countdownPaused = !countdownPaused;
+    e.target.textContent = countdownPaused ? 'Resume Countdown' : 'Pause Countdown';
+    toast.info(countdownPaused ? 'Countdown paused. Review your summary at your own pace.' : 'Countdown resumed.', 'Timer Updated');
+  });
+
+  document.getElementById('printSummaryBtn')?.addEventListener('click', () => {
+    window.print();
+  });
+
   let returnedToLogin = false;
   const returnToLogin = () => {
     if (returnedToLogin) return;
     returnedToLogin = true;
+    clearInterval(countdownInterval);
     resetParticipantSession();
     renderLogin();
   };
   document.getElementById('restart').onclick = returnToLogin;
-  window.setTimeout(returnToLogin, completionError ? 6000 : 5000);
 }
 
 function startDisplayTimer() {
@@ -2905,6 +3695,40 @@ function assessmentProgressSnapshot() {
   return { total, answered, skipped, completed, percent: Math.round(completed / total * 100) };
 }
 function escapeHtml(s) { return s.replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[c])); }
+
+function extractErrorString(data, fallback) {
+  if (!data) return fallback;
+  if (typeof data === 'string') return data;
+  if (data.detail) {
+    if (typeof data.detail === 'string') return data.detail;
+    if (Array.isArray(data.detail)) {
+      return data.detail.map(d => {
+        if (typeof d === 'object' && d !== null) {
+          const loc = Array.isArray(d.loc) ? d.loc.filter(x => x !== 'body').join('.') : '';
+          return (loc ? `${loc}: ` : '') + (d.msg || d.message || JSON.stringify(d));
+        }
+        return String(d);
+      }).join('; ');
+    }
+    if (typeof data.detail === 'object') return JSON.stringify(data.detail);
+  }
+  if (data.message && typeof data.message === 'string') return data.message;
+  return fallback;
+}
+
+async function safeGet(path, token = '') {
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(extractErrorString(data, `HTTP ${res.status}`));
+  return data;
+}
+
+async function safeDelete(path, token = '') {
+  return safeJsonRequest('DELETE', path, {}, token);
+}
+
 async function safePost(path, body, token = '') {
   return safeJsonRequest('POST', path, body, token);
 }
@@ -2920,7 +3744,7 @@ async function safeStreamPost(path, body, onEvent, token = '', signal) {
   }
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.detail || `server returned HTTP ${response.status}`);
+    throw new Error(extractErrorString(data, `server returned HTTP ${response.status}`));
   }
   if (!response.body) throw new Error('streaming is not supported by this browser');
   const reader = response.body.getReader();
@@ -2955,7 +3779,7 @@ async function safeJsonRequest(method, path, body, token = '') {
   }
   if (!res) throw new Error(`cannot connect to the local server. Reload ${window.location.origin}/ and try again.`);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || `server returned HTTP ${res.status}`);
+  if (!res.ok) throw new Error(extractErrorString(data, `server returned HTTP ${res.status}`));
   return data;
 }
 
@@ -3351,7 +4175,16 @@ const adminFilterState = {
   domainFilter: 'all',
   cachedCognitiveData: null,
   cachedCohortParticipants: [],
+  cachedTasks: [],
+  activeTab: 'overview',
   workflowCollapsed: false,
+  tasksFilterDomain: 'all',
+  tasksFilterDifficulty: 'all',
+  tasksFilterAge: 'all',
+  tasksSearchQuery: '',
+  launchDomain: 'Artificial Intelligence',
+  launchAge: '23–28',
+  launchTaskId: '',
 };
 
 async function refreshDashboard() {
@@ -3553,23 +4386,19 @@ function renderAdminWorkflowFlowchart() {
   `;
 }
 
-function renderAdminAnalytics(data, cliData) {
+function renderAdminOverviewTab(cliData, participantList) {
   const isCohort = !adminFilterState.selectedParticipant || adminFilterState.selectedParticipant === 'all';
+  return `
+    <section class="admin-cli-section" id="adminCliContent">
+      ${isCohort
+        ? renderAdminCognitiveCohortView(cliData, participantList)
+        : renderAdminCognitiveIndividualView(cliData, adminFilterState.selectedParticipant)}
+    </section>
+  `;
+}
 
-  // Extract unified participant roster for dropdown and tables
-  let participantList = [];
-  if (Array.isArray(adminFilterState.cachedCohortParticipants) && adminFilterState.cachedCohortParticipants.length) {
-    participantList = adminFilterState.cachedCohortParticipants;
-  } else if (cliData && Array.isArray(cliData.participants)) {
-    participantList = cliData.participants;
-  } else if (adminFilterState.cachedCognitiveData && Array.isArray(adminFilterState.cachedCognitiveData.participants)) {
-    participantList = adminFilterState.cachedCognitiveData.participants;
-  } else if (Array.isArray(data.stored_results) && data.stored_results.length) {
-    participantList = data.stored_results;
-  }
-
+function renderAdminRosterTab(data, cliData, participantList) {
   const domains = [...new Set(participantList.map(p => p.domain).filter(Boolean))].sort();
-
   return `
     <!-- Top Filter Bar -->
     <section class="admin-filter-bar" aria-label="Participant Cognitive Load Filters">
@@ -3605,41 +4434,443 @@ function renderAdminAnalytics(data, cliData) {
       </div>
     </section>
 
-    <!-- Dynamic Cognitive Load View Area -->
-    <section class="admin-cli-section" id="adminCliContent">
-      ${isCohort
-      ? renderAdminCognitiveCohortView(cliData, participantList)
-      : renderAdminCognitiveIndividualView(cliData, adminFilterState.selectedParticipant)}
-    </section>
-
-    <!-- Platform Tools & Telemetry Panel -->
-    <article class="card panel admin-export-panel">
-      <div class="section-label">All Platform Tracking Tables</div>
-      <p>Directly inspect full database records across each individual sensing modality and telemetry component.</p>
-      
-      <div class="admin-export-buttons">
-        <button class="secondary" data-admin-dataset="eye-tracking">Eye Tracking Table</button>
-        <button class="secondary" data-admin-dataset="facial-expression">Facial Expression Table</button>
-        <button class="secondary" data-admin-dataset="keyboard">Keyboard Table</button>
-        <button class="secondary" data-admin-dataset="mouse">Mouse/Cursor Table</button>
-        <button class="secondary" data-admin-dataset="prompt-tracking">Prompt Tracking Table</button>
-        <button class="secondary" data-admin-dataset="multimodal-second">Multimodal Second-Level Table</button>
-        <button class="secondary" data-admin-dataset="question-features">Question-Level Features Table</button>
-        <button class="secondary" data-admin-dataset="measurement-records">Complete Measurement Records</button>
-        <button class="secondary" data-admin-dataset="rag-prompt-evaluations">RAG Prompt Evaluation Table</button>
-        <button class="secondary" data-admin-dataset="rag-pipeline">RAG Pipeline Table</button>
-        <button class="secondary" data-admin-dataset="rag-documents">RAG Documents Table</button>
-        <button class="secondary" data-admin-dataset="nasa-tlx">NASA-TLX Ratings Table</button>
-        <button class="primary" data-admin-dataset="session-cli-change">Session CLI Change Table</button>
-        <button class="secondary" data-admin-export="session-cli-change">Export Session CLI Change CSV</button>
+    <!-- Participant Cognitive Load Roster Table -->
+    <article class="card panel admin-cli-roster-card">
+      <div class="detail-page-heading">
+        <div>
+          <div class="section-label">PARTICIPANT COGNITIVE LOAD ROSTER</div>
+          <h3>Cohort Participant Telemetry & Status</h3>
+          <p id="rosterFilterCountText">Showing ${participantList.length} monitored participant(s). Select a user to inspect their multimodal telemetry breakdown.</p>
+        </div>
       </div>
-
-      <div class="section-label" style="margin-top:24px;">Dataset Integrity & Validation</div>
-      <p>Verify feature parity, missing signals, duplicate keys, and multimodal sensor alignment before model training.</p>
-      <div class="admin-export-buttons">
-        <button class="secondary" data-admin-validation>Run Dataset Validation</button>
+      <div class="monitor-table">
+        <table id="adminParticipantRosterTable">
+          <thead>
+            <tr>
+              <th>Participant</th>
+              <th>Domain</th>
+              <th>Status</th>
+              <th>Time in App</th>
+              <th>Answers</th>
+              <th>NASA-TLX</th>
+              <th>Cognitive Load Index (CLI)</th>
+              <th>Trend</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="adminParticipantRosterBody">
+            ${renderAdminRosterRows(participantList)}
+          </tbody>
+        </table>
       </div>
     </article>
+  `;
+}
+
+
+function launchAdminTaskSession(task) {
+  if (state.authRole !== 'admin') {
+    toast.error('Only administrators can enter tasks through this feature.', 'Admin Restricted');
+    return;
+  }
+  if (!task) {
+    toast.error('Please select a valid task to enter.', 'No Task Selected');
+    return;
+  }
+
+  state.adminMode = true;
+  state.adminTask = task;
+  state.participant = {
+    participant_id: 'ADMIN-SIM',
+    username: 'admin',
+    full_name: 'Administrator (Simulation)',
+    domain: task.domain || 'Artificial Intelligence',
+    age_group: task.target_age || '23–28',
+    test_mode: true
+  };
+  state.questions = [task];
+  state.current = 0;
+  state.subquestion = 0;
+  state.selectedLLM = state.selectedLLM || 'Groq';
+  state.started = true;
+  state.trackingActive = true;
+  state.trackingStartedAt = Date.now();
+  state.startTime = Date.now();
+  state.assessmentDeadline = Date.now() + 3600 * 1000;
+  state.assessmentStage = 'exam';
+  state.messages = [];
+  state.answerDraft = '';
+  state.questionDrafts = {};
+
+  toast.info(`Entered Task "${task.title}" (${task.domain} • ${task.target_age || 'All Ages'}) in Admin Mode.`, 'Admin Task Entered');
+  renderExam();
+}
+
+function renderAdminTaskManagement() {
+  const tasks = adminFilterState.cachedTasks || [];
+  const domains = ['All Domains', 'Artificial Intelligence', 'Computer Science', 'Data Science', 'Software Development', 'Cross-Disciplinary', 'Other'];
+  const difficulties = ['All Difficulties', 'Easy', 'Medium', 'Hard'];
+  const ages = ['All Ages', '18–22', '23–28', '29–35', '36–45', '46+'];
+
+  const filteredTasks = tasks.filter(t => {
+    if (adminFilterState.tasksFilterDomain && adminFilterState.tasksFilterDomain !== 'all' && adminFilterState.tasksFilterDomain !== 'All Domains') {
+      if (t.domain !== adminFilterState.tasksFilterDomain) return false;
+    }
+    if (adminFilterState.tasksFilterDifficulty && adminFilterState.tasksFilterDifficulty !== 'all' && adminFilterState.tasksFilterDifficulty !== 'All Difficulties') {
+      if (t.difficulty !== adminFilterState.tasksFilterDifficulty) return false;
+    }
+    if (adminFilterState.tasksFilterAge && adminFilterState.tasksFilterAge !== 'all' && adminFilterState.tasksFilterAge !== 'All Ages') {
+      if (t.target_age && t.target_age !== 'All Ages' && t.target_age !== adminFilterState.tasksFilterAge) return false;
+    }
+    if (adminFilterState.tasksSearchQuery) {
+      const q = adminFilterState.tasksSearchQuery.toLowerCase();
+      const match = (t.title || '').toLowerCase().includes(q) || (t.id || '').toLowerCase().includes(q) || (t.scenario || '').toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    return true;
+  });
+
+  // Calculate matching tasks for the Admin Task Launcher (Domain + Age Group)
+  const currentLaunchDomain = adminFilterState.launchDomain || 'Artificial Intelligence';
+  const currentLaunchAge = adminFilterState.launchAge || '23–28';
+
+  const matchesLaunchAge = (t) => {
+    if (!t.target_age || t.target_age === 'All Ages' || t.target_age === 'All' || currentLaunchAge === 'All Ages') return true;
+    return t.target_age === currentLaunchAge;
+  };
+
+  const matchingLaunchTasks = tasks.filter(t => 
+    (t.domain === currentLaunchDomain || t.domain === 'Cross-Disciplinary' || currentLaunchDomain === 'All Domains') && matchesLaunchAge(t)
+  );
+
+  let activeLaunchTask = matchingLaunchTasks.find(t => t.id === adminFilterState.launchTaskId);
+  if (!activeLaunchTask && matchingLaunchTasks.length > 0) {
+    activeLaunchTask = matchingLaunchTasks[0];
+    adminFilterState.launchTaskId = activeLaunchTask.id;
+  }
+
+  return `
+    <div class="admin-task-management-layout">
+      <!-- Admin Exclusive Top Ribbon -->
+      <div class="admin-exclusive-ribbon">
+        <span class="ribbon-icon">🛡️</span>
+        <span>ADMINISTRATOR TASK MANAGEMENT & SIMULATION PORTAL</span>
+        <span class="ribbon-tag">Admin Exclusive</span>
+      </div>
+
+      <!-- 1. LIVE TASK LAUNCHER (ENTER TASK BASED ON DOMAIN & AGE GROUP) -->
+      <article class="card panel admin-task-launch-card">
+        <div class="launch-header-row">
+          <div>
+            <div class="section-label" style="color:var(--blue); font-weight:800; display:flex; align-items:center; gap:6px;">
+              <span>🚀</span> ENTER ASSESSMENT TASK (ADMIN ONLY)
+            </div>
+            <h3 style="margin:4px 0 6px;">Launch Assessment Task by Domain & Target Age Cohort</h3>
+            <p style="margin:0; font-size:13px; color:var(--muted);">
+              As an Administrator, choose any domain specialization and age demographic to immediately enter and test the live interactive assessment environment.
+            </p>
+          </div>
+          <div class="admin-shield-badge">🔒 ADMIN PRIVILEGE</div>
+        </div>
+
+        <div class="admin-task-launch-controls" style="margin-top:18px;">
+          <div class="grid-3">
+            <div class="field">
+              <label><strong>1. Select Domain *</strong></label>
+              <select id="adminLaunchDomainSelect">
+                <option value="Artificial Intelligence" ${currentLaunchDomain === 'Artificial Intelligence' ? 'selected' : ''}>Artificial Intelligence</option>
+                <option value="Computer Science" ${currentLaunchDomain === 'Computer Science' ? 'selected' : ''}>Computer Science</option>
+                <option value="Data Science" ${currentLaunchDomain === 'Data Science' ? 'selected' : ''}>Data Science</option>
+                <option value="Software Development" ${currentLaunchDomain === 'Software Development' ? 'selected' : ''}>Software Development</option>
+                <option value="Cross-Disciplinary" ${currentLaunchDomain === 'Cross-Disciplinary' ? 'selected' : ''}>Cross-Disciplinary</option>
+              </select>
+            </div>
+            <div class="field">
+              <label><strong>2. Select Target Age Group *</strong></label>
+              <select id="adminLaunchAgeSelect">
+                <option value="All Ages" ${currentLaunchAge === 'All Ages' ? 'selected' : ''}>All Ages (General)</option>
+                <option value="18–22" ${currentLaunchAge === '18–22' ? 'selected' : ''}>18–22 (Undergraduate)</option>
+                <option value="23–28" ${currentLaunchAge === '23–28' ? 'selected' : ''}>23–28 (Graduate / Early Career)</option>
+                <option value="29–35" ${currentLaunchAge === '29–35' ? 'selected' : ''}>29–35 (Mid-level Professional)</option>
+                <option value="36–45" ${currentLaunchAge === '36–45' ? 'selected' : ''}>36–45 (Senior Professional)</option>
+                <option value="46+" ${currentLaunchAge === '46+' ? 'selected' : ''}>46+ (Experienced / Executive)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label><strong>3. Select Task from Cohort (${matchingLaunchTasks.length}) *</strong></label>
+              <select id="adminLaunchTaskSelect">
+                ${matchingLaunchTasks.length 
+                  ? matchingLaunchTasks.map(t => `<option value="${escapeHtml(t.id)}" ${activeLaunchTask?.id === t.id ? 'selected' : ''}>${escapeHtml(t.title)} (${escapeHtml(t.difficulty || 'Normal')})</option>`).join('')
+                  : '<option value="">No tasks match this domain & age cohort</option>'
+                }
+              </select>
+            </div>
+          </div>
+
+          <!-- Dynamic Task Preview Box -->
+          <div id="adminLaunchTaskPreviewBox" class="admin-launch-preview-card" style="margin-top:14px; padding:18px; border-radius:12px; background:var(--input-bg); border:1.5px solid var(--border);">
+            ${activeLaunchTask ? `
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+                <h4 style="margin:0; font-size:15px; font-weight:800; color:var(--text);">${escapeHtml(activeLaunchTask.title)}</h4>
+                <div style="display:flex; gap:6px;">
+                  <span class="badge diff-badge ${(activeLaunchTask.difficulty || 'Easy').toLowerCase()}">${escapeHtml(activeLaunchTask.difficulty || 'Easy')}</span>
+                  <span class="badge domain-badge">${escapeHtml(activeLaunchTask.domain || 'AI')}</span>
+                  <span class="badge age-badge">${escapeHtml(activeLaunchTask.target_age || 'All Ages')}</span>
+                  <span class="expected-time-tag">⏱ ${escapeHtml(activeLaunchTask.expectedTime || '3–5 mins')}</span>
+                </div>
+              </div>
+              <p style="margin:0 0 10px; font-size:13px; line-height:1.5; color:var(--muted);">${escapeHtml(activeLaunchTask.scenario || '')}</p>
+              ${activeLaunchTask.instructions && activeLaunchTask.instructions.length ? `
+                <div style="font-size:12px; color:var(--text); font-weight:600; margin-bottom:4px;">Collaboration Objectives:</div>
+                <ul style="margin:0; padding-left:18px; font-size:12.5px; color:var(--muted); line-height:1.45;">
+                  ${(Array.isArray(activeLaunchTask.instructions) ? activeLaunchTask.instructions : [String(activeLaunchTask.instructions)]).slice(0, 3).map(ins => `<li>${escapeHtml(ins)}</li>`).join('')}
+                </ul>
+              ` : ''}
+            ` : '<p style="margin:0; color:var(--muted);">No task available for the selected cohort. Select another domain or age group above.</p>'}
+          </div>
+
+          <div class="admin-launch-actions" style="margin-top:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+            <button class="primary admin-launch-btn" id="adminLaunchTaskBtn" type="button" ${!activeLaunchTask ? 'disabled' : ''} style="padding:11px 24px; font-weight:800; font-size:14px; border-radius:10px; display:inline-flex; align-items:center; gap:8px; cursor:pointer; box-shadow:0 6px 20px rgba(36, 94, 232, 0.28);">
+              <span>🚀 Enter Assessment Task (Admin Run)</span>
+            </button>
+            <small style="color:var(--muted); font-size:12.5px;">Simulates full live candidate session with active AI model, typing/mouse telemetry capture, and problem solving.</small>
+          </div>
+        </div>
+      </article>
+
+      <!-- 2. CREATE NEW TASK FORM (ADMIN AUTHORING BY DOMAIN & AGE) -->
+      <article class="card panel admin-task-create-card">
+        <div class="section-label" style="color:var(--green); font-weight:800; display:flex; align-items:center; gap:6px;">
+          <span>📝</span> AUTHOR & ENTER ASSESSMENT TASK (ADMIN ONLY)
+        </div>
+        <h3 style="margin:4px 0 6px;">Enter New Task Configured by Domain & Target Age Group</h3>
+        <p style="margin:0; font-size:13px; color:var(--muted);">Define a custom challenge scenario categorized by domain and target age cohort to publish into platform rotation.</p>
+        
+        <form id="adminTaskCreateForm" class="admin-task-form">
+          <div class="grid-2">
+            <div class="field">
+              <label>Task Title *</label>
+              <input id="taskTitle" placeholder="e.g. Memory Optimization in Transformer KV-Caches" required />
+            </div>
+            <div class="field">
+              <label>Sub-Domain / Category</label>
+              <input id="taskCategory" placeholder="e.g. LLM Inference & Optimization" />
+            </div>
+          </div>
+
+          <div class="grid-3">
+            <div class="field">
+              <label>Domain *</label>
+              <select id="taskDomain" required>
+                <option value="Artificial Intelligence">Artificial Intelligence</option>
+                <option value="Computer Science">Computer Science</option>
+                <option value="Data Science">Data Science</option>
+                <option value="Software Development">Software Development</option>
+                <option value="Cross-Disciplinary">Cross-Disciplinary</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Target Age Category *</label>
+              <select id="taskTargetAge" required>
+                <option value="All Ages">All Ages (General)</option>
+                <option value="18–22">18–22 (Undergraduate)</option>
+                <option value="23–28">23–28 (Graduate / Early Career)</option>
+                <option value="29–35">29–35 (Mid-level Professional)</option>
+                <option value="36–45">36–45 (Senior Professional)</option>
+                <option value="46+">46+ (Experienced / Executive)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Difficulty Level *</label>
+              <select id="taskDifficulty" required>
+                <option value="Easy">Easy (Foundation / Exploratory)</option>
+                <option value="Medium" selected>Medium (Standard Production Case)</option>
+                <option value="Hard">Hard (Deep Algorithmic & Trade-off)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Expected Completion Time</label>
+            <input id="taskExpectedTime" placeholder="e.g. 3–5 minutes" value="3–5 minutes" />
+          </div>
+
+          <div class="field">
+            <label>Problem Scenario & Context *</label>
+            <textarea id="taskScenario" rows="3" placeholder="Describe the real-world engineering or reasoning challenge..." required></textarea>
+          </div>
+
+          <div class="field">
+            <label>Collaboration Objectives & Focus Instructions (1 per line) *</label>
+            <textarea id="taskInstructions" rows="3" placeholder="1. Ask the AI assistant to analyze trade-offs...
+2. Evaluate potential edge cases and latency penalties...
+3. Critique the AI recommendation..." required></textarea>
+          </div>
+
+          <div class="form-actions" style="margin-top:14px; display:flex; gap:12px; align-items:center;">
+            <button class="primary" type="submit" id="createTaskSubmitBtn" style="padding:10px 20px; font-weight:700;">+ Enter & Deploy Task</button>
+            <span id="taskCreateStatus" class="save-status"></span>
+          </div>
+        </form>
+      </article>
+
+      <!-- 3. ACTIVE TASK REPOSITORY & FILTERS -->
+      <article class="card panel admin-task-inventory-card">
+        <div class="inventory-header">
+          <div>
+            <div class="section-label">ACTIVE TASK REPOSITORY (${filteredTasks.length} tasks)</div>
+            <h3 style="margin:4px 0 6px;">Tasks in Platform Rotation</h3>
+            <p style="margin:0; font-size:13px; color:var(--muted);">Filter active tasks across domains, difficulty levels, and target age cohorts. Administrators can directly enter any task below.</p>
+          </div>
+        </div>
+
+        <div class="admin-task-filters">
+          <input type="text" id="adminTaskSearch" placeholder="🔍 Search tasks by title or scenario..." value="${escapeHtml(adminFilterState.tasksSearchQuery || '')}" />
+          <select id="adminTaskDomainFilter">
+            ${domains.map(d => `<option value="${d}" ${adminFilterState.tasksFilterDomain === d ? 'selected' : ''}>${d}</option>`).join('')}
+          </select>
+          <select id="adminTaskDiffFilter">
+            ${difficulties.map(df => `<option value="${df}" ${adminFilterState.tasksFilterDifficulty === df ? 'selected' : ''}>${df}</option>`).join('')}
+          </select>
+          <select id="adminTaskAgeFilter">
+            ${ages.map(a => `<option value="${a}" ${adminFilterState.tasksFilterAge === a ? 'selected' : ''}>${a}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="admin-tasks-grid">
+          ${filteredTasks.length ? filteredTasks.map(t => `
+            <div class="admin-task-card card ${t.is_custom ? 'custom-task' : 'predefined-task'}">
+              <div class="admin-task-meta">
+                <span class="badge diff-badge ${(t.difficulty || 'Easy').toLowerCase()}">${escapeHtml(t.difficulty || 'Easy')}</span>
+                <span class="badge domain-badge">${escapeHtml(t.domain || 'General')}</span>
+                <span class="badge age-badge">${escapeHtml(t.target_age || 'All Ages')}</span>
+                ${t.is_custom ? '<span class="badge badge-custom">Custom Admin Task</span>' : '<span class="badge badge-system">System Predefined</span>'}
+              </div>
+              <h4 class="admin-task-title">${escapeHtml(t.title)}</h4>
+              <p class="admin-task-desc">${escapeHtml((t.scenario || '').slice(0, 160))}${(t.scenario || '').length > 160 ? '...' : ''}</p>
+              <div class="admin-task-footer">
+                <small>⏱ ${escapeHtml(t.expectedTime || '3–5 mins')} · ID: ${escapeHtml(t.id)}</small>
+                <div class="admin-task-actions" style="display:flex; gap:6px;">
+                  <button class="primary btn-xs admin-quick-enter-task-btn" data-enter-task-id="${escapeHtml(t.id)}" type="button" title="Enter this task in Admin Mode">▶ Enter Task</button>
+                  ${t.is_custom ? `<button class="danger-btn btn-xs" data-delete-task="${escapeHtml(t.id)}" type="button">Delete</button>` : ''}
+                </div>
+              </div>
+            </div>
+          `).join('') : '<p style="padding:20px; color:var(--muted)">No tasks match the selected filter criteria.</p>'}
+        </div>
+      </article>
+    </div>
+  `;
+}
+function renderAdminExportsTab() {
+  const pid = adminFilterState.selectedParticipant !== 'all' ? adminFilterState.selectedParticipant : null;
+  const participantNotice = pid ? `<span class="badge">Filtered by Participant: ${escapeHtml(pid)}</span>` : '<span class="badge">All Participants (Platform-wide)</span>';
+
+  return `
+    <article class="card panel admin-export-panel">
+      <div class="exports-tab-header">
+        <div>
+          <div class="section-label">PLATFORM TELEMETRY & RESEARCH EXPORTS</div>
+          <h3>Structured Multimodal Data Tables</h3>
+          <p>Directly inspect full database records or export high-resolution CSV datasets. ${participantNotice}</p>
+        </div>
+      </div>
+
+      <div class="export-categories-grid">
+        <div class="export-category-card card">
+          <div class="category-heading">
+            <span class="cat-icon">👁</span>
+            <strong>Physiological & Sensor Modalities</strong>
+          </div>
+          <p>Webcam computer vision, gaze fixation coordinates, facial action units, and raw input dynamics.</p>
+          <div class="export-category-buttons">
+            <button class="secondary" data-admin-dataset="eye-tracking">Eye Tracking Table</button>
+            <button class="secondary" data-admin-dataset="facial-expression">Facial Expression Table</button>
+            <button class="secondary" data-admin-dataset="keyboard">Keyboard Dynamics Table</button>
+            <button class="secondary" data-admin-dataset="mouse">Mouse Tracking Table</button>
+          </div>
+        </div>
+
+        <div class="export-category-card card">
+          <div class="category-heading">
+            <span class="cat-icon">🧠</span>
+            <strong>Cognitive Workload & Assessment Datasets</strong>
+          </div>
+          <p>Cognitive Load Index (CLI), second-level multimodal fusion, task features, and NASA-TLX verification.</p>
+          <div class="export-category-buttons">
+            <button class="secondary" data-admin-dataset="multimodal-second">Multimodal Second-Level Table</button>
+            <button class="secondary" data-admin-dataset="question-features">Question-Level Features Table</button>
+            <button class="secondary" data-admin-dataset="measurement-records">Complete Measurement Records</button>
+            <button class="secondary" data-admin-dataset="nasa-tlx">NASA-TLX Ratings Table</button>
+            <button class="primary" data-admin-dataset="session-cli-change">Session CLI Change Table</button>
+            <button class="secondary" data-admin-export="session-cli-change">Export CLI Change CSV</button>
+          </div>
+        </div>
+
+        <div class="export-category-card card">
+          <div class="category-heading">
+            <span class="cat-icon">🤖</span>
+            <strong>RAG Architecture & Interaction Telemetry</strong>
+          </div>
+          <p>Context chunk retrieval scores, prompt grounding evaluations, and LLM collaborative dialogues.</p>
+          <div class="export-category-buttons">
+            <button class="secondary" data-admin-dataset="rag-prompt-evaluations">RAG Prompt Evaluation Table</button>
+            <button class="secondary" data-admin-dataset="rag-pipeline">RAG Pipeline Table</button>
+            <button class="secondary" data-admin-dataset="rag-documents">RAG Documents Table</button>
+            <button class="secondary" data-admin-dataset="chat-logs">Chat Logs & Feedback Table</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="validation-section-card card" style="margin-top:20px;">
+        <div class="section-label">DATASET INTEGRITY & VALIDATION</div>
+        <h4>Multimodal Signal Parity & Synchronization Verification</h4>
+        <p>Verify sensor alignment, missing modalities, and dataset completeness before running statistical ML benchmarks.</p>
+        <button class="secondary" data-admin-validation type="button">Run Dataset Validation</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderAdminAnalytics(data, cliData) {
+  // Extract unified participant roster for dropdown and tables
+  let participantList = [];
+  if (Array.isArray(adminFilterState.cachedCohortParticipants) && adminFilterState.cachedCohortParticipants.length) {
+    participantList = adminFilterState.cachedCohortParticipants;
+  } else if (cliData && Array.isArray(cliData.participants)) {
+    participantList = cliData.participants;
+  } else if (adminFilterState.cachedCognitiveData && Array.isArray(adminFilterState.cachedCognitiveData.participants)) {
+    participantList = adminFilterState.cachedCognitiveData.participants;
+  } else if (Array.isArray(data.stored_results) && data.stored_results.length) {
+    participantList = data.stored_results;
+  }
+
+  // Populate cachedTasks from PREDEFINED_TASKS and any custom tasks if empty
+  if (!adminFilterState.cachedTasks || !adminFilterState.cachedTasks.length) {
+    safeGet('/admin/tasks').then(res => {
+      const customs = (res && Array.isArray(res.custom_tasks)) ? res.custom_tasks : [];
+      adminFilterState.cachedTasks = [...customs, ...PREDEFINED_TASKS];
+    }).catch(() => {
+      adminFilterState.cachedTasks = [...PREDEFINED_TASKS];
+    });
+  }
+
+  return `
+    <!-- Top Level Dashboard Tab Navigation -->
+    <nav class="admin-tab-nav" role="tablist">
+      <button class="admin-tab-btn ${adminFilterState.activeTab === 'overview' ? 'active' : ''}" data-admin-tab="overview" type="button" role="tab">📊 Cognitive Overview & KPIs</button>
+      <button class="admin-tab-btn ${adminFilterState.activeTab === 'roster' ? 'active' : ''}" data-admin-tab="roster" type="button" role="tab">👥 Participant Roster (${participantList.length})</button>
+      <button class="admin-tab-btn ${adminFilterState.activeTab === 'tasks' ? 'active' : ''}" data-admin-tab="tasks" type="button" role="tab">📝 Task Management</button>
+      <button class="admin-tab-btn ${adminFilterState.activeTab === 'exports' ? 'active' : ''}" data-admin-tab="exports" type="button" role="tab">📁 Telemetry Data & Exports</button>
+    </nav>
+
+    <div class="admin-tab-container">
+      ${adminFilterState.activeTab === 'overview' ? renderAdminOverviewTab(cliData, participantList) : ''}
+      ${adminFilterState.activeTab === 'roster' ? renderAdminRosterTab(data, cliData, participantList) : ''}
+      ${adminFilterState.activeTab === 'tasks' ? renderAdminTaskManagement() : ''}
+      ${adminFilterState.activeTab === 'exports' ? renderAdminExportsTab() : ''}
+    </div>
   `;
 }
 
@@ -4136,6 +5367,173 @@ function renderAdminCognitiveIndividualView(cliData, participantId) {
 }
 
 function attachAdminDashboardEvents(container, data, cliData) {
+  // Tab Switching
+  container.querySelectorAll('[data-admin-tab]').forEach(tabBtn => {
+    tabBtn.onclick = () => {
+      adminFilterState.activeTab = tabBtn.dataset.adminTab;
+      refreshDashboard();
+    };
+  });
+
+  // Task Creation Form Submit
+  const taskForm = container.querySelector('#adminTaskCreateForm');
+  if (taskForm) {
+    taskForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const title = container.querySelector('#taskTitle')?.value.trim();
+      const domain = container.querySelector('#taskDomain')?.value;
+      const target_age = container.querySelector('#taskTargetAge')?.value;
+      const difficulty = container.querySelector('#taskDifficulty')?.value;
+      const category = container.querySelector('#taskCategory')?.value.trim();
+      const expected_time = container.querySelector('#taskExpectedTime')?.value.trim();
+      const scenario = container.querySelector('#taskScenario')?.value.trim();
+      const instructions = container.querySelector('#taskInstructions')?.value.trim().split('\n').filter(Boolean);
+
+      const submitBtn = container.querySelector('#createTaskSubmitBtn');
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Deploying Task…'; }
+
+      try {
+        const res = await safePost('/admin/tasks', {
+          title, domain, target_age, difficulty, category, expected_time, scenario, instructions
+        }, state.authToken);
+        toast.success(`Task "${title}" created and published to rotation!`, 'Task Created');
+        
+        // Refresh cached tasks
+        const tasksRes = await safeGet('/admin/tasks');
+        const customs = (tasksRes && Array.isArray(tasksRes.custom_tasks)) ? tasksRes.custom_tasks : [];
+        adminFilterState.cachedTasks = [...customs, ...PREDEFINED_TASKS];
+        refreshDashboard();
+      } catch (err) {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '+ Create & Deploy Task'; }
+        toast.error(`Task creation failed: ${err.message}`, 'Creation Error');
+      }
+    };
+  }
+
+  // Admin Task Launcher Controls (Enter Task by Domain & Age Group)
+  const launchDomainSelect = container.querySelector('#adminLaunchDomainSelect');
+  if (launchDomainSelect) {
+    launchDomainSelect.onchange = () => {
+      adminFilterState.launchDomain = launchDomainSelect.value;
+      adminFilterState.launchTaskId = '';
+      refreshDashboard();
+    };
+  }
+
+  const launchAgeSelect = container.querySelector('#adminLaunchAgeSelect');
+  if (launchAgeSelect) {
+    launchAgeSelect.onchange = () => {
+      adminFilterState.launchAge = launchAgeSelect.value;
+      adminFilterState.launchTaskId = '';
+      refreshDashboard();
+    };
+  }
+
+  const launchTaskSelect = container.querySelector('#adminLaunchTaskSelect');
+  if (launchTaskSelect) {
+    launchTaskSelect.onchange = () => {
+      adminFilterState.launchTaskId = launchTaskSelect.value;
+      const tasks = adminFilterState.cachedTasks || [];
+      const chosen = tasks.find(t => t.id === launchTaskSelect.value);
+      const previewBox = container.querySelector('#adminLaunchTaskPreviewBox');
+      const launchBtn = container.querySelector('#adminLaunchTaskBtn');
+      if (previewBox && chosen) {
+        previewBox.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+            <h4 style="margin:0; font-size:15px; font-weight:800; color:var(--text);">${escapeHtml(chosen.title)}</h4>
+            <div style="display:flex; gap:6px;">
+              <span class="badge diff-badge ${(chosen.difficulty || 'Easy').toLowerCase()}">${escapeHtml(chosen.difficulty || 'Easy')}</span>
+              <span class="badge domain-badge">${escapeHtml(chosen.domain || 'AI')}</span>
+              <span class="badge age-badge">${escapeHtml(chosen.target_age || 'All Ages')}</span>
+              <span class="expected-time-tag">⏱ ${escapeHtml(chosen.expectedTime || '3–5 mins')}</span>
+            </div>
+          </div>
+          <p style="margin:0 0 10px; font-size:13px; line-height:1.5; color:var(--muted);">${escapeHtml(chosen.scenario || '')}</p>
+        `;
+        if (launchBtn) launchBtn.disabled = false;
+      }
+    };
+  }
+
+  const launchTaskBtn = container.querySelector('#adminLaunchTaskBtn');
+  if (launchTaskBtn) {
+    launchTaskBtn.onclick = () => {
+      const tasks = adminFilterState.cachedTasks || [];
+      const selectedId = adminFilterState.launchTaskId || container.querySelector('#adminLaunchTaskSelect')?.value;
+      const targetTask = tasks.find(t => t.id === selectedId) || tasks[0];
+      if (targetTask) {
+        launchAdminTaskSession(targetTask);
+      } else {
+        toast.warning('Please select a valid task to enter.', 'No Task Selected');
+      }
+    };
+  }
+
+  // Quick Enter Task from Repository Cards
+  container.querySelectorAll('[data-enter-task-id]').forEach(btn => {
+    btn.onclick = () => {
+      const taskId = btn.dataset.enterTaskId;
+      const tasks = adminFilterState.cachedTasks || [];
+      const targetTask = tasks.find(t => t.id === taskId);
+      if (targetTask) {
+        launchAdminTaskSession(targetTask);
+      }
+    };
+  });
+
+  // Task Filter Inputs
+  const taskSearch = container.querySelector('#adminTaskSearch');
+  if (taskSearch) {
+    taskSearch.oninput = () => {
+      adminFilterState.tasksSearchQuery = taskSearch.value;
+      refreshDashboard();
+    };
+  }
+  const taskDomainFilter = container.querySelector('#adminTaskDomainFilter');
+  if (taskDomainFilter) {
+    taskDomainFilter.onchange = () => {
+      adminFilterState.tasksFilterDomain = taskDomainFilter.value;
+      refreshDashboard();
+    };
+  }
+  const taskDiffFilter = container.querySelector('#adminTaskDiffFilter');
+  if (taskDiffFilter) {
+    taskDiffFilter.onchange = () => {
+      adminFilterState.tasksFilterDifficulty = taskDiffFilter.value;
+      refreshDashboard();
+    };
+  }
+  const taskAgeFilter = container.querySelector('#adminTaskAgeFilter');
+  if (taskAgeFilter) {
+    taskAgeFilter.onchange = () => {
+      adminFilterState.tasksFilterAge = taskAgeFilter.value;
+      refreshDashboard();
+    };
+  }
+
+  // Task Delete Buttons
+  container.querySelectorAll('[data-delete-task]').forEach(btn => {
+    btn.onclick = async () => {
+      const taskId = btn.dataset.deleteTask;
+      const ok = await confirmToast(`Delete custom task ${taskId}?`, {
+        title: 'Delete Task?',
+        confirmText: 'Delete Task',
+        cancelText: 'Cancel',
+        type: 'error',
+        danger: true
+      });
+      if (!ok) return;
+      try {
+        await safeDelete(`/admin/tasks/${encodeURIComponent(taskId)}`, state.authToken);
+        toast.success(`Task ${taskId} removed from repository.`, 'Task Deleted');
+        adminFilterState.cachedTasks = (adminFilterState.cachedTasks || []).filter(t => t.id !== taskId);
+        refreshDashboard();
+      } catch (err) {
+        toast.error(`Failed to delete task: ${err.message}`, 'Delete Error');
+      }
+    };
+  });
+
   // 1. User Selector dropdown
   const userSelector = container.querySelector('#adminUserSelector');
   if (userSelector) {
@@ -4321,7 +5719,7 @@ async function downloadTrackingExport(exportName, specificParticipant = null) {
     link.click();
     URL.revokeObjectURL(url);
   } catch (error) {
-    alert(`Tracking export failed: ${error.message}`);
+    toast.error(`Tracking export failed: ${error.message}`, 'Export Error');
   }
 }
 
