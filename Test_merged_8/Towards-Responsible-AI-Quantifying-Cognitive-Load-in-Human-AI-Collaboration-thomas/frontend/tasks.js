@@ -318,99 +318,104 @@ export function getAllTasks() {
 
 /**
  * Dynamic Task Selector
- * Selects exactly 6 tasks tailored to the participant's Domain, Age Group, and AI Familiarity level.
+ * Selects all tasks tailored to the participant's Domain and Target Age Group.
+ * As administrators add tasks, the session list dynamically expands to include all matching tasks
+ * without any arbitrary 6-question ceiling.
  *
  * @param {Object} participant - Participant profile { domain, age_group, ai_familiarity }
  * @param {Array} [externalCustomTasks] - Optional custom tasks from admin
- * @returns {Array} Array of 6 matched tasks ordered with a progressive cognitive curve.
+ * @returns {Array} Array of all matched tasks ordered with a progressive cognitive curve.
  */
 export function selectSessionTasks(participant = {}, externalCustomTasks = null) {
   const customList = Array.isArray(externalCustomTasks) ? externalCustomTasks : customAdminTasks;
   const combinedTasks = [...customList, ...PREDEFINED_TASKS];
-  const rawDomain = String(participant.domain || '').trim().toLowerCase();
-  const rawLevel = String(participant.ai_familiarity || '').trim().toLowerCase();
-  const rawAge = String(participant.age_group || '').trim();
+
+  // Helpers to normalize strings
+  const normStr = (str) => String(str || '').trim().toLowerCase();
+  const normAge = (str) => String(str || '').replace(/[‐-―]/g, '-').trim().toLowerCase();
+
+  const rawDomain = normStr(participant.domain);
+  const rawAge = normAge(participant.age_group);
+  const rawLevel = normStr(participant.ai_familiarity);
 
   // Normalize Domain
-  let targetDomain = 'Cross-Disciplinary';
+  let targetDomain = '';
   if (rawDomain.includes('artificial') || rawDomain.includes('intelligence') || rawDomain === 'ai') {
     targetDomain = 'Artificial Intelligence';
   } else if (rawDomain.includes('computer') || rawDomain.includes('cs')) {
     targetDomain = 'Computer Science';
   } else if (rawDomain.includes('data')) {
     targetDomain = 'Data Science';
-  } else if (rawDomain.includes('software') || rawDomain.includes('development') || rawDomain.includes('engineering')) {
+  } else if (rawDomain.includes('software') || rawDomain.includes('development') || rawDomain.includes('engineering') || rawDomain === 'se') {
     targetDomain = 'Software Development';
+  } else if (rawDomain.includes('cross') || rawDomain.includes('disciplinary')) {
+    targetDomain = 'Cross-Disciplinary';
+  } else if (participant.domain) {
+    targetDomain = String(participant.domain).trim();
   }
-
-  // Normalize Complexity Track: Beginner | Intermediate | Advanced
-  let track = 'intermediate';
-  if (rawLevel.includes('begin') || rawLevel.includes('novice') || rawLevel.includes('low')) {
-    track = 'beginner';
-  } else if (rawLevel.includes('adv') || rawLevel.includes('expert') || rawLevel.includes('high')) {
-    track = 'advanced';
-  }
-
-  // Complexity quotas for the 6 tasks:
-  // Beginner: 3 Easy, 2 Medium, 1 Hard
-  // Intermediate: 1 Easy, 3 Medium, 2 Hard
-  // Advanced: 1 Easy, 2 Medium, 3 Hard
-  const quota = track === 'beginner'
-    ? { Easy: 3, Medium: 2, Hard: 1 }
-    : track === 'advanced'
-    ? { Easy: 1, Medium: 2, Hard: 3 }
-    : { Easy: 1, Medium: 3, Hard: 2 };
 
   // Helper to test if task matches participant age category
-  const matchesAge = t => {
-    if (!t.target_age || t.target_age === 'All Ages' || t.target_age === 'All' || !rawAge) return true;
-    return t.target_age === rawAge;
+  const matchesAge = (t) => {
+    if (!rawAge) return true;
+    const taskAge = normAge(t.target_age);
+    if (!taskAge || taskAge === 'all ages' || taskAge === 'all') return true;
+    return taskAge === rawAge;
   };
 
-  // Separate tasks into candidate buckets
-  const domainTasks = combinedTasks.filter(t => (t.domain === targetDomain || t.domain === 'Cross-Disciplinary') && matchesAge(t));
-  const otherTasks = combinedTasks.filter(t => t.domain !== targetDomain && matchesAge(t));
-  const fallbackTasks = combinedTasks;
-
-  // Group by difficulty
-  const candidatesByDiff = {
-    Easy: [...domainTasks.filter(t => t.difficulty === 'Easy'), ...otherTasks.filter(t => t.difficulty === 'Easy'), ...fallbackTasks.filter(t => t.difficulty === 'Easy')],
-    Medium: [...domainTasks.filter(t => t.difficulty === 'Medium'), ...otherTasks.filter(t => t.difficulty === 'Medium'), ...fallbackTasks.filter(t => t.difficulty === 'Medium')],
-    Hard: [...domainTasks.filter(t => t.difficulty === 'Hard'), ...otherTasks.filter(t => t.difficulty === 'Hard'), ...fallbackTasks.filter(t => t.difficulty === 'Hard')],
+  // Helper to test if task matches participant domain
+  const matchesDomain = (t) => {
+    if (!targetDomain || targetDomain.toLowerCase() === 'other' || targetDomain.toLowerCase() === 'all domains') {
+      return true;
+    }
+    const taskDom = normStr(t.domain);
+    const targetNorm = normStr(targetDomain);
+    if (taskDom === targetNorm) return true;
+    // Cross-Disciplinary tasks are designed to be relevant across all domains
+    if (taskDom === 'cross-disciplinary' || taskDom === 'all' || taskDom === 'all domains') return true;
+    return false;
   };
 
-  const selected = [];
-  const selectedIds = new Set();
-
-  // Select according to difficulty quota
-  for (const [diff, countNeeded] of Object.entries(quota)) {
-    let collected = 0;
-    const pool = candidatesByDiff[diff] || [];
-    for (const task of pool) {
-      if (!selectedIds.has(task.id) && collected < countNeeded) {
-        selected.push(task);
-        selectedIds.add(task.id);
-        collected++;
-      }
+  // Deduplicate tasks by task.id (custom admin tasks come first, so they take precedence)
+  const taskMap = new Map();
+  for (const t of combinedTasks) {
+    if (t && t.id && !taskMap.has(t.id)) {
+      taskMap.set(t.id, t);
     }
   }
+  const allUniqueTasks = Array.from(taskMap.values());
 
-  // Fallback to guarantee exactly 6 unique tasks
-  if (selected.length < 6) {
-    for (const task of combinedTasks) {
-      if (!selectedIds.has(task.id) && selected.length < 6) {
-        selected.push(task);
-        selectedIds.add(task.id);
-      }
-    }
+  // Filter tasks that match both domain and age group
+  let selected = allUniqueTasks.filter(t => matchesDomain(t) && matchesAge(t));
+
+  // If no task strictly matched both, fallback gracefully so user has assessment tasks
+  if (selected.length === 0) {
+    selected = allUniqueTasks.filter(t => matchesDomain(t));
+  }
+  if (selected.length === 0) {
+    selected = allUniqueTasks.filter(t => matchesAge(t));
+  }
+  if (selected.length === 0) {
+    selected = allUniqueTasks;
   }
 
-  // Sort tasks to create a progressive cognitive load curve: Easy -> Medium -> Hard
+  // Sort tasks to create a progressive cognitive load curve:
+  // Primary domain tasks first, then cross-disciplinary
+  // Within each group, sort by difficulty: Easy -> Medium -> Hard
   const diffOrder = { Easy: 1, Medium: 2, Hard: 3 };
-  selected.sort((a, b) => (diffOrder[a.difficulty] || 2) - (diffOrder[b.difficulty] || 2));
+  selected.sort((a, b) => {
+    const aIsPrimary = targetDomain && normStr(a.domain) === normStr(targetDomain) ? 0 : 1;
+    const bIsPrimary = targetDomain && normStr(b.domain) === normStr(targetDomain) ? 0 : 1;
+    if (aIsPrimary !== bIsPrimary) return aIsPrimary - bIsPrimary;
+
+    const diffA = diffOrder[a.difficulty] || 2;
+    const diffB = diffOrder[b.difficulty] || 2;
+    return diffA - diffB;
+  });
+
+  const totalTasks = selected.length;
 
   // Format tasks into assessment questions
-  return selected.slice(0, 6).map((task, idx) => {
+  return selected.map((task, idx) => {
     const taskNum = idx + 1;
     const instructions = Array.isArray(task.instructions)
       ? task.instructions
@@ -427,7 +432,7 @@ export function selectSessionTasks(participant = {}, externalCustomTasks = null)
       difficulty: task.difficulty,
       category: task.category,
       expectedTime: task.expectedTime,
-      questionPart: `Task ${taskNum} of 6`,
+      questionPart: `Task ${taskNum} of ${totalTasks}`,
       scenario: task.scenario,
       instructions: instructions,
       text: `${task.scenario}\n\nTask Focus:\n${instructions.map((ins, i) => `${i + 1}. ${ins}`).join('\n')}`,

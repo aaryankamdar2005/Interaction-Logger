@@ -1248,10 +1248,10 @@ class FlexibleModel(BaseModel):
 class Participant(FlexibleModel):
     participant_id: str = ""
     username: str = ""
-    full_name: str = Field(min_length=1, max_length=200)
-    age_group: str
-    domain: str
-    ai_familiarity: str
+    full_name: str = ""
+    age_group: str = ""
+    domain: str = ""
+    ai_familiarity: str = ""
     test_mode: bool = False
 
 
@@ -1359,22 +1359,22 @@ class AssessmentStart(BaseModel):
     calibration_status: str = Field(default="started", max_length=30)
 
 
-class NasaTlxRatings(BaseModel):
-    mental_demand: int = Field(ge=0, le=10)
-    physical_demand: int = Field(ge=0, le=10)
-    temporal_demand: int = Field(ge=0, le=10)
-    performance: int = Field(ge=0, le=10)
-    effort: int = Field(ge=0, le=10)
-    frustration: int = Field(ge=0, le=10)
+class NasaTlxRatings(FlexibleModel):
+    mental_demand: float = Field(default=5.0, ge=0, le=10)
+    physical_demand: float = Field(default=5.0, ge=0, le=10)
+    temporal_demand: float = Field(default=5.0, ge=0, le=10)
+    performance: float = Field(default=5.0, ge=0, le=10)
+    effort: float = Field(default=5.0, ge=0, le=10)
+    frustration: float = Field(default=5.0, ge=0, le=10)
 
 
-class BaselineNasaTlxRatings(BaseModel):
-    mental_demand: int = Field(ge=0, le=10)
-    physical_demand: int = Field(ge=0, le=10)
-    temporal_demand: int = Field(ge=0, le=10)
-    performance: int = Field(ge=0, le=10)
-    effort: int = Field(ge=0, le=10)
-    frustration: int = Field(ge=0, le=10)
+class BaselineNasaTlxRatings(FlexibleModel):
+    mental_demand: float = Field(default=5.0, ge=0, le=10)
+    physical_demand: float = Field(default=5.0, ge=0, le=10)
+    temporal_demand: float = Field(default=5.0, ge=0, le=10)
+    performance: float = Field(default=5.0, ge=0, le=10)
+    effort: float = Field(default=5.0, ge=0, le=10)
+    frustration: float = Field(default=5.0, ge=0, le=10)
 
 
 class BaselineNasaTlxSubmission(BaseModel):
@@ -1382,10 +1382,10 @@ class BaselineNasaTlxSubmission(BaseModel):
     ratings: BaselineNasaTlxRatings
 
 
-class QuestionWorkloadRating(BaseModel):
-    question_id: str = Field(min_length=1, max_length=100)
-    question_number: int = Field(ge=1, le=10)
-    rating: int = Field(ge=1, le=10)
+class QuestionWorkloadRating(FlexibleModel):
+    question_id: str = ""
+    question_number: int = 1
+    rating: float = 5.0
 
 
 class SessionResumeRequest(FlexibleModel):
@@ -1400,11 +1400,11 @@ class SessionCompletion(FlexibleModel):
     session_started_at: str = ""
     session_ended_at: str = ""
     ended_early: bool = False
-    overall_paas_rating: int | None = Field(default=None, ge=1, le=10)
+    overall_paas_rating: float | int | None = Field(default=None)
     nasa_tlx: NasaTlxRatings | None = None
-    question_ratings: list[QuestionWorkloadRating] = Field(default_factory=list, max_length=10)
-    answers: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
-    interaction_summary: dict[str, Any] = Field(default_factory=dict, max_length=100)
+    question_ratings: list[QuestionWorkloadRating] = Field(default_factory=list)
+    answers: list[dict[str, Any]] = Field(default_factory=list)
+    interaction_summary: dict[str, Any] = Field(default_factory=dict)
 
 
 class VisionFrame(BaseModel):
@@ -4714,6 +4714,30 @@ def login_user(payload: UserLoginRequest) -> dict[str, Any]:
         "token": token,
     }
 
+
+
+class UserUpdateDomainRequest(BaseModel):
+    username: str
+    domain: str
+
+
+@app.post("/api/users/update-domain")
+def update_user_domain(payload: UserUpdateDomainRequest) -> dict[str, Any]:
+    username = payload.username.strip().lower()
+    new_domain = payload.domain.strip()
+    if not username or not new_domain:
+        raise HTTPException(status_code=400, detail="Username and domain are required")
+    existing_users = storage.list_records("users", 10000)
+    for u in existing_users:
+        if str(u.get("username", "")).strip().lower() == username:
+            u["domain"] = new_domain
+            storage.append(
+                "users.csv",
+                ["username", "full_name", "email", "password_hash", "age_group", "domain", "ai_familiarity", "created_at"],
+                u,
+            )
+            return {"success": True, "domain": new_domain, "username": username}
+    return {"success": True, "domain": new_domain, "username": username}
 
 @app.get("/api/users/list")
 def list_registered_users() -> dict[str, Any]:
