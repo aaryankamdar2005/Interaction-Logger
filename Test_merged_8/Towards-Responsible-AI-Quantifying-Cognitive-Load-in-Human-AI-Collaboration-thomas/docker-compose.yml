@@ -1,0 +1,23 @@
+services:
+  cognitrack-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cognitrack_app
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    env_file:
+      - .env
+    environment:
+      - PORT=8002
+    volumes:
+      # Persist SQLite databases, user profiles, and dynamic tasks across restarts
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8002/api/health\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+

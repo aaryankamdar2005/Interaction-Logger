@@ -1,0 +1,27 @@
+# Git & IDE
+.git
+.gitignore
+.vscode
+.idea
+*.sublime*
+
+# Python
+venv
+.venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+
+# Node & Frontend builds
+node_modules
+dist
+
+# Temporary & runtime logs
+*.log
+runtime.*
+.DS_Store
+Thumbs.db
+
